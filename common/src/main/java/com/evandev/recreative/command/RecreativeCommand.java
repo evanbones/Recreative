@@ -2,11 +2,13 @@ package com.evandev.recreative.command;
 
 import com.evandev.recreative.Constants;
 import com.evandev.recreative.config.ModConfig;
+import com.evandev.recreative.data.Action;
 import com.evandev.recreative.data.CreativeTabManager;
+import com.evandev.recreative.data.ItemEntry;
+import com.evandev.recreative.data.TabRule;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabsAccessor;
 import com.evandev.recreative.platform.Services;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.google.gson.*;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.ChatFormatting;
@@ -20,15 +22,31 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.ItemStack;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class RecreativeCommand {
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .registerTypeAdapter(Action.class, (JsonSerializer<Action>) (src, typeOfSrc, context) ->
+                    new JsonPrimitive(src.name().toLowerCase()))
+            .registerTypeAdapter(ItemEntry.class, (JsonSerializer<ItemEntry>) (src, typeOfSrc, context) -> {
+                if (src.after == null && src.before == null) {
+                    return new JsonPrimitive(src.item);
+                }
+                JsonObject obj = new JsonObject();
+                obj.addProperty("item", src.item);
+                if (src.after != null) obj.addProperty("after", src.after);
+                if (src.before != null) obj.addProperty("before", src.before);
+                return obj;
+            })
+            .create();
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("recreative")
@@ -53,6 +71,7 @@ public class RecreativeCommand {
                         .then(Commands.literal("tabs").executes(c -> executeDump(c, "tabs")))
                         .then(Commands.literal("items").executes(c -> executeDump(c, "items")))
                         .then(Commands.literal("blocks").executes(c -> executeDump(c, "blocks")))
+                        .then(Commands.literal("templates").executes(RecreativeCommand::executeDumpTemplates))
                         .then(Commands.literal("all").executes(c -> executeDump(c, "all")))
                 )
         );
@@ -80,6 +99,68 @@ public class RecreativeCommand {
         } catch (Exception e) {
             Constants.LOG.error("Failed to dump data for: {}", type, e);
             source.sendFailure(Component.translatable("command.recreative.dump.failure", type));
+            return 0;
+        }
+    }
+
+    private static int executeDumpTemplates(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        try {
+            CreativeModeTab.ItemDisplayParameters params = CreativeModeTabsAccessor.getCachedParameters();
+            Path baseDir = Services.PLATFORM.getConfigDirectory().resolve("recreative").resolve("tabs");
+
+            for (Identifier id : BuiltInRegistries.CREATIVE_MODE_TAB.keySet()) {
+                CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(id);
+                if (tab == null) continue;
+
+                if (params != null && tab.getDisplayItems().isEmpty()) {
+                    tab.buildContents(params);
+                }
+
+                TabRule rule = new TabRule();
+                rule.action = Action.MODIFY_TAB;
+                rule.tabs.add(id.toString());
+
+                ItemStack iconStack = tab.getIconItem();
+                if (!iconStack.isEmpty()) {
+                    Identifier iconId = BuiltInRegistries.ITEM.getKey(iconStack.getItem());
+                    if (iconId != null) {
+                        rule.icon = iconId.toString();
+                    }
+                }
+
+                for (ItemStack stack : tab.getDisplayItems()) {
+                    Identifier itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                    if (itemId != null) {
+                        rule.addItems.add(new ItemEntry(itemId.toString()));
+                    }
+                }
+
+                File modDir = baseDir.resolve(id.getNamespace()).toFile();
+                if (!modDir.exists() && !modDir.mkdirs()) {
+                    Constants.LOG.error("Failed to create directory: {}", modDir);
+                    continue;
+                }
+
+                File file = new File(modDir, id.getPath() + ".json");
+                try (FileWriter writer = new FileWriter(file)) {
+                    GSON.toJson(List.of(rule), writer);
+                }
+            }
+
+            Component link = Component.literal("recreative/tabs/")
+                    .withStyle(Style.EMPTY
+                            .withColor(ChatFormatting.GREEN)
+                            .withUnderlined(true)
+                            .withClickEvent(new ClickEvent.CopyToClipboard(baseDir.toFile().getAbsolutePath()))
+                            .withHoverEvent(new HoverEvent.ShowText(Component.literal("Click to copy path to clipboard")))
+                    );
+
+            source.sendSuccess(() -> Component.translatable("command.recreative.dump.success", "templates").append(" ").append(link), false);
+            return 1;
+        } catch (Exception e) {
+            Constants.LOG.error("Failed to dump tab templates", e);
+            source.sendFailure(Component.translatable("command.recreative.dump.failure", "templates"));
             return 0;
         }
     }
@@ -124,8 +205,8 @@ public class RecreativeCommand {
                 .withStyle(Style.EMPTY
                         .withColor(ChatFormatting.GREEN)
                         .withUnderlined(true)
-                        .withClickEvent(new ClickEvent.OpenFile(dir.getAbsolutePath()))
-                        .withHoverEvent(new HoverEvent.ShowText(Component.translatable("command.recreative.dump.hover")))
+                        .withClickEvent(new ClickEvent.CopyToClipboard(dir.getAbsolutePath()))
+                        .withHoverEvent(new HoverEvent.ShowText(Component.literal("Click to copy path to clipboard")))
                 );
 
         source.sendSuccess(() -> Component.translatable("command.recreative.dump.success", type).append(" ").append(link), false);

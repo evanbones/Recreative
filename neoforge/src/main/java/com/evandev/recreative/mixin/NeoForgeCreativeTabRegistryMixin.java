@@ -4,7 +4,7 @@ import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import net.minecraft.world.item.CreativeModeTab;
-import net.minecraftforge.common.CreativeModeTabRegistry;
+import net.neoforged.neoforge.common.CreativeModeTabRegistry;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Set;
 
 @Mixin(CreativeModeTabRegistry.class)
-public class ForgeCreativeTabRegistryMixin {
+public class NeoForgeCreativeTabRegistryMixin {
 
     @Unique
     private static final Set<String> SPECIAL_TABS = Set.of(

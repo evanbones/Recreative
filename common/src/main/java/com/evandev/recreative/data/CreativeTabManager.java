@@ -67,18 +67,18 @@ public class CreativeTabManager {
             CreativeModeTab tab = Services.PLATFORM.buildCreativeTab(
                     Component.translatable(def.name),
                     () -> {
-                        Item iconItem = BuiltInRegistries.ITEM.get(new ResourceLocation(def.icon));
+                        Item iconItem = BuiltInRegistries.ITEM.get(ResourceLocation.parse(def.icon));
                         return new ItemStack(iconItem);
                     },
                     (parameters, output) -> {
                         for (ItemEntry entry : def.addItems) {
                             if (entry.item.startsWith("#")) {
-                                TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(entry.item.substring(1)));
+                                TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(entry.item.substring(1)));
                                 for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
                                     output.accept(new ItemStack(holder.value()));
                                 }
                             } else {
-                                Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
+                                Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(entry.item));
                                 output.accept(new ItemStack(item));
                             }
                         }

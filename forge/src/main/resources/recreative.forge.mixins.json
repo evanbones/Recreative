@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.evandev.recreative.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "${mod_id}.refmap.json",
+  "mixins": [
+    "ForgeCreativeTabRegistryMixin"
+  ],
+  "client": [
+  ],
+  "server": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

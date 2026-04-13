@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,11 +23,29 @@ import java.util.Set;
 @Mixin(CreativeModeTabs.class)
 public class CreativeModeTabsMixin {
 
-    // These tabs have native UI behaviors and must NOT be moved visually
     @Unique
     private static final Set<String> SPECIAL_TABS = Set.of(
             "minecraft:search", "minecraft:inventory", "minecraft:hotbar", "minecraft:op_blocks"
     );
+
+    @Inject(method = "getDefaultTab", at = @At("HEAD"), cancellable = true)
+    private static void recreative$onGetDefaultTab(CallbackInfoReturnable<CreativeModeTab> cir) {
+        if (!ModConfig.get().enabled) return;
+
+        List<CreativeModeTab> allTabs = CreativeModeTabsInvoker.invokeStreamAllTabs().toList();
+        List<String> order = CreativeTabManager.getConfig().tabOrder;
+        List<CreativeModeTab> sorted = recreative$sortCreativeModeTabs(allTabs, order);
+
+        for (CreativeModeTab tab : sorted) {
+            ResourceLocation id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
+            String tabId = id != null ? id.toString() : "";
+
+            if (!SPECIAL_TABS.contains(tabId) && !CreativeTabManager.getConfig().removedTabs.contains(tabId)) {
+                cir.setReturnValue(tab);
+                return;
+            }
+        }
+    }
 
     @Inject(method = "validate", at = @At("HEAD"))
     private static void safeRepackPageOne(CallbackInfo ci) {
@@ -37,16 +56,21 @@ public class CreativeModeTabsMixin {
         List<CreativeModeTab> sorted = recreative$sortCreativeModeTabs(allTabs, order);
 
         int pageOneSlot = 0;
+        int hiddenSlotColumn = 100;
 
         for (CreativeModeTab tab : sorted) {
             ResourceLocation id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
             String tabId = id != null ? id.toString() : "";
 
-            if (CreativeTabManager.getConfig().removedTabs.contains(tabId)) continue;
-
             if (SPECIAL_TABS.contains(tabId)) continue;
 
-            if (pageOneSlot >= 10) break;
+            if (CreativeTabManager.getConfig().removedTabs.contains(tabId)) {
+                ((CreativeModeTabAccessor) tab).setRow(CreativeModeTab.Row.TOP);
+                ((CreativeModeTabAccessor) tab).setColumn(hiddenSlotColumn++);
+                continue;
+            }
+
+            if (pageOneSlot >= 10) continue;
 
             CreativeModeTab.Row row = pageOneSlot < 5 ? CreativeModeTab.Row.TOP : CreativeModeTab.Row.BOTTOM;
             int column = pageOneSlot % 5;

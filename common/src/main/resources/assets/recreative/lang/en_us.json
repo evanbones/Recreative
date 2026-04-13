@@ -1,0 +1,8 @@
+{
+  "config.recreative.title": "Recreative Config",
+  "config.recreative.category.general": "General",
+  "config.recreative.option.enabled": "Enable Mod",
+  "config.recreative.option.enabled.tooltip": "Toggle the entire mod on or off.",
+  "config.recreative.option.show_internal_ids": "Show Internal Tab IDs",
+  "config.recreative.option.show_internal_ids.tooltip": "Displays the registry ID of the tab instead of its translated name. Useful for configuring recreative_tabs.json."
+}

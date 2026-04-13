@@ -5,9 +5,12 @@ import com.evandev.recreative.platform.Services;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -69,8 +72,15 @@ public class CreativeTabManager {
                     },
                     (parameters, output) -> {
                         for (ItemEntry entry : def.addItems) {
-                            Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
-                            output.accept(new ItemStack(item));
+                            if (entry.item.startsWith("#")) {
+                                TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(entry.item.substring(1)));
+                                for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
+                                    output.accept(new ItemStack(holder.value()));
+                                }
+                            } else {
+                                Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
+                                output.accept(new ItemStack(item));
+                            }
                         }
                     }
             );

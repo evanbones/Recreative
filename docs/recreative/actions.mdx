@@ -3,8 +3,6 @@ title: Rule Actions
 hide_meta: true
 ---
 
-# Rule Actions
-
 Recreative provides 4 main actions you can use in your JSON files to manipulate Creative Tabs.
 
 ## 1. Removing Tabs (`remove_tab`)
@@ -51,7 +49,7 @@ Creates a brand new tab from scratch.
 {
   "action": "custom_tab",
   "tabs": ["my_pack:building_materials"],
-  "name": "Custom Building Mats",
+  "name": "Custom Building Materials",
   "icon": "minecraft:bricks",
   "add_items": [
     "minecraft:stone",
@@ -73,6 +71,28 @@ Forces tabs to appear in a specific order from left to right. Any tabs not inclu
     "minecraft:tools_and_utilities",
     "my_pack:building_materials",
     "minecraft:building_blocks"
+  ]
+}
+```
+
+## Using Item Tags
+
+You don't need to specify every single item by its ID. Anywhere that accepts an item ID in `add_items` or `remove_items`, you can use **Item Tags** by prefixing the ID with a `#` symbol.
+
+This will automatically find all items registered to that tag and apply the action to them.
+
+**Example:**
+
+```json
+{
+  "action": "modify_tab",
+  "tabs": ["minecraft:building_blocks"],
+  "remove_items": [
+    "#minecraft:logs",
+    "#minecraft:leaves"
+  ],
+  "add_items": [
+    "#c:ores"
   ]
 }
 ```

@@ -3,8 +3,6 @@ title: Advanced Item Placement
 hide_meta: true
 ---
 
-# Advanced Item Placement
-
 When using `modify_tab` to add items to an existing tab, simply listing the item ID as a string will append it to the very end of the tab.
 
 However, Recreative allows you to define items as more complex objects to inject them exactly where you want relative to other items!
@@ -20,7 +18,7 @@ Instead of providing a string (e.g., `"minecraft:diamond"`), you provide an obje
   "tabs": ["minecraft:building_blocks"],
   "add_items": [
     {
-      "item": "minecraft:diamond_block",
+      "item": "minecraft:diamond_block", // Also supports item tabs like "#minecraft:logs"
       "after": "minecraft:iron_block"
     }
   ]
@@ -37,7 +35,7 @@ Instead of providing a string (e.g., `"minecraft:diamond"`), you provide an obje
   "tabs": ["minecraft:building_blocks"],
   "add_items": [
     {
-      "item": "minecraft:emerald_block",
+      "item": "minecraft:emerald_block", // Also supports item tags
       "before": "minecraft:gold_block"
     }
   ]

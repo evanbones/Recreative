@@ -1,0 +1,26 @@
+---
+title: Commands
+hide_meta: true
+---
+
+Recreative provides a few useful in-game commands to help you manage your configuration and easily find IDs without leaving the game. All commands require OP (permission level 2) to execute.
+
+## Reloading Configuration
+
+**Command:** `/recreative reload`
+
+This command hot-reloads your `recreative_settings.json` and all the rule files located in your `config/recreative/` folder. It automatically rebuilds the creative tab contents on the fly, allowing you to see your changes instantly without needing to restart the game.
+
+## Dumping Data
+
+**Command:** `/recreative dump <target>`
+
+The dump command exports registry lists into nicely formatted JSON files located in the `config/recreative_exports` directory.
+
+Upon a successful dump, the command provides a clickable link in the chat to open the export folder directly.
+
+**Available targets:**
+* `tabs`: Exports all registered Creative Mode Tab IDs. This includes Vanilla tabs, tabs added by other mods, and your custom Recreative tabs.
+* `items`: Exports all registered Item IDs.
+* `blocks`: Exports all registered Block IDs.
+* `all`: Generates the tabs, items, and blocks dump files all at once.

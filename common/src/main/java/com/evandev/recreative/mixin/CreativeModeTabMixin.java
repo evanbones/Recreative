@@ -4,9 +4,12 @@ import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -22,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 @Mixin(CreativeModeTab.class)
 public abstract class CreativeModeTabMixin {
@@ -87,39 +91,57 @@ public abstract class CreativeModeTabMixin {
         List<ItemStack> tempSearchItems = new ArrayList<>(this.displayItemsSearchTab);
 
         if (!modifier.removeItems.isEmpty()) {
-            tempDisplayItems.removeIf(stack -> {
+            Predicate<ItemStack> shouldRemove = stack -> {
                 ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                return modifier.removeItems.contains(itemId.toString());
-            });
-            tempSearchItems.removeIf(stack -> {
-                ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                return modifier.removeItems.contains(itemId.toString());
-            });
+                if (modifier.removeItems.contains(itemId.toString())) return true;
+
+                for (String removal : modifier.removeItems) {
+                    if (removal.startsWith("#")) {
+                        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(removal.substring(1)));
+                        if (stack.is(tagKey)) return true;
+                    }
+                }
+                return false;
+            };
+
+            tempDisplayItems.removeIf(shouldRemove);
+            tempSearchItems.removeIf(shouldRemove);
         }
 
         if (!modifier.addItems.isEmpty()) {
             for (ItemEntry entry : modifier.addItems) {
-                Item itemToAdd = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
-                ItemStack stack = new ItemStack(itemToAdd);
+                List<ItemStack> stacksToAdd = new ArrayList<>();
 
-                int insertIndex = tempDisplayItems.size();
-                if (entry.after != null) {
-                    for (int i = 0; i < tempDisplayItems.size(); i++) {
-                        if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.after)) {
-                            insertIndex = i + 1;
-                        }
+                if (entry.item.startsWith("#")) {
+                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(entry.item.substring(1)));
+                    for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
+                        stacksToAdd.add(new ItemStack(holder.value()));
                     }
-                } else if (entry.before != null) {
-                    for (int i = 0; i < tempDisplayItems.size(); i++) {
-                        if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.before)) {
-                            insertIndex = i;
-                            break;
-                        }
-                    }
+                } else {
+                    Item itemToAdd = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
+                    stacksToAdd.add(new ItemStack(itemToAdd));
                 }
 
-                tempDisplayItems.add(insertIndex, stack.copy());
-                tempSearchItems.add(stack.copy());
+                for (ItemStack stack : stacksToAdd) {
+                    int insertIndex = tempDisplayItems.size();
+                    if (entry.after != null) {
+                        for (int i = 0; i < tempDisplayItems.size(); i++) {
+                            if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.after)) {
+                                insertIndex = i + 1;
+                            }
+                        }
+                    } else if (entry.before != null) {
+                        for (int i = 0; i < tempDisplayItems.size(); i++) {
+                            if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.before)) {
+                                insertIndex = i;
+                                break;
+                            }
+                        }
+                    }
+
+                    tempDisplayItems.add(insertIndex, stack.copy());
+                    tempSearchItems.add(stack.copy());
+                }
             }
         }
 

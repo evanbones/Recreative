@@ -36,8 +36,8 @@ public class ForgeCreativeTabRegistryMixin {
         }
 
         List<CreativeModeTab> filtered = new ArrayList<>();
-        List<String> order = CreativeTabManager.getConfig().tabOrder;
-        List<String> removed = CreativeTabManager.getConfig().removedTabs;
+        List<String> order = CreativeTabManager.TAB_ORDER;
+        Set<String> removed = CreativeTabManager.REMOVED_TABS;
 
         for (CreativeModeTab tab : original) {
             String id = CreativeTabManager.getTabId(tab);
@@ -55,8 +55,8 @@ public class ForgeCreativeTabRegistryMixin {
             if (spec1 && !spec2) return 1;
             if (!spec1 && spec2) return -1;
 
-            int idx1 = order != null ? order.indexOf(id1) : -1;
-            int idx2 = order != null ? order.indexOf(id2) : -1;
+            int idx1 = order.indexOf(id1);
+            int idx2 = order.indexOf(id2);
 
             if (idx1 == -1 && idx2 == -1) return Integer.compare(original.indexOf(t1), original.indexOf(t2));
             if (idx1 == -1) return 1;

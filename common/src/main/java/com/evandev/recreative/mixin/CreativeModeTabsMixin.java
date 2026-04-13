@@ -29,8 +29,8 @@ public class CreativeModeTabsMixin {
     private static void recreative$onGetDefaultTab(CallbackInfoReturnable<CreativeModeTab> cir) {
         if (!ModConfig.get().enabled) return;
 
-        List<String> order = CreativeTabManager.getConfig().tabOrder;
-        List<String> removed = CreativeTabManager.getConfig().removedTabs;
+        List<String> order = CreativeTabManager.TAB_ORDER;
+        Set<String> removed = CreativeTabManager.REMOVED_TABS;
 
         List<CreativeModeTab> allTabs = new ArrayList<>(BuiltInRegistries.CREATIVE_MODE_TAB.stream().toList());
         allTabs.addAll(CreativeTabManager.RUNTIME_TABS.values());
@@ -59,8 +59,8 @@ public class CreativeModeTabsMixin {
         }
 
         List<CreativeModeTab> filtered = new ArrayList<>();
-        List<String> order = CreativeTabManager.getConfig().tabOrder;
-        List<String> removed = CreativeTabManager.getConfig().removedTabs;
+        List<String> order = CreativeTabManager.TAB_ORDER;
+        Set<String> removed = CreativeTabManager.REMOVED_TABS;
 
         for (CreativeModeTab tab : original) {
             String id = CreativeTabManager.getTabId(tab);

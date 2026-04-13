@@ -1,7 +1,35 @@
 ---
-title: Usage
+title: Usage & Setup
 hide_meta: true
 ---
 
-### Configuration Location
-The mod watches the `./config/recreative/` folder in your instance.
+# Configuration Location
+
+Recreative uses watches the `./config/recreative/` folder in your Minecraft instance for files.
+
+### Creating Rules
+You can create as many `.json` files inside this folder as you want (e.g., `remove_vanilla.json`, `my_modpack_tabs.json`, `custom_combat.json`). Recreative will read all of them and combine the rules.
+
+This is useful for modpack developers who want to organize their scripts, or for sharing specific UI tweaks with others without overwriting their entire configuration.
+
+### The Basic Structure
+Every file must contain a JSON array of "Rule" objects. Each rule must have an `action` defining what it does.
+
+For example:
+
+```json
+[
+  {
+    "action": "remove_tab",
+    "tabs": ["minecraft:building_blocks"]
+  },
+  {
+    "action": "custom_tab",
+    "tabs": ["my_pack:magic"],
+    "name": "Magical Items"
+  }
+]
+
+```
+
+To see all available actions and what they do, check out the [Rule Actions](/project/recreative/docs/recreative/actions) page.

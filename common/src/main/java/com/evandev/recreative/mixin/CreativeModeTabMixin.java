@@ -2,7 +2,7 @@ package com.evandev.recreative.mixin;
 
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
-import com.evandev.recreative.data.TabConfig;
+import com.evandev.recreative.data.ItemEntry;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -18,7 +18,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 
 @Mixin(CreativeModeTab.class)
@@ -40,7 +42,7 @@ public abstract class CreativeModeTabMixin {
         if (!ModConfig.get().enabled) return;
 
         String id = recreative$getTabId();
-        if (CreativeTabManager.getConfig().removedTabs.contains(id)) {
+        if (CreativeTabManager.REMOVED_TABS.contains(id)) {
             cir.setReturnValue(false);
         }
     }
@@ -55,7 +57,7 @@ public abstract class CreativeModeTabMixin {
             return;
         }
 
-        TabConfig.ModifyTabDef modifier = CreativeTabManager.getConfig().modifyTabs.get(id);
+        CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
         if (modifier != null && modifier.name != null && !modifier.name.isEmpty()) {
             cir.setReturnValue(Component.translatable(modifier.name));
         }
@@ -66,7 +68,7 @@ public abstract class CreativeModeTabMixin {
         if (!ModConfig.get().enabled) return;
 
         String id = recreative$getTabId();
-        TabConfig.ModifyTabDef modifier = CreativeTabManager.getConfig().modifyTabs.get(id);
+        CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
         if (modifier != null && modifier.icon != null && !modifier.icon.isEmpty()) {
             Item customIcon = BuiltInRegistries.ITEM.get(new ResourceLocation(modifier.icon));
             cir.setReturnValue(new ItemStack(customIcon));
@@ -78,28 +80,54 @@ public abstract class CreativeModeTabMixin {
         if (!ModConfig.get().enabled) return;
 
         String id = recreative$getTabId();
-        TabConfig.ModifyTabDef modifier = CreativeTabManager.getConfig().modifyTabs.get(id);
+        CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
         if (modifier == null) return;
 
+        List<ItemStack> tempDisplayItems = new ArrayList<>(this.displayItems);
+        List<ItemStack> tempSearchItems = new ArrayList<>(this.displayItemsSearchTab);
+
         if (!modifier.removeItems.isEmpty()) {
-            this.displayItems.removeIf(stack -> {
+            tempDisplayItems.removeIf(stack -> {
                 ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
                 return modifier.removeItems.contains(itemId.toString());
             });
-            this.displayItemsSearchTab.removeIf(stack -> {
+            tempSearchItems.removeIf(stack -> {
                 ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
                 return modifier.removeItems.contains(itemId.toString());
             });
         }
 
         if (!modifier.addItems.isEmpty()) {
-            for (String itemStr : modifier.addItems) {
-                Item itemToAdd = BuiltInRegistries.ITEM.get(new ResourceLocation(itemStr));
+            for (ItemEntry entry : modifier.addItems) {
+                Item itemToAdd = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
                 ItemStack stack = new ItemStack(itemToAdd);
-                this.displayItems.add(stack);
-                this.displayItemsSearchTab.add(stack);
+
+                int insertIndex = tempDisplayItems.size();
+                if (entry.after != null) {
+                    for (int i = 0; i < tempDisplayItems.size(); i++) {
+                        if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.after)) {
+                            insertIndex = i + 1;
+                        }
+                    }
+                } else if (entry.before != null) {
+                    for (int i = 0; i < tempDisplayItems.size(); i++) {
+                        if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.before)) {
+                            insertIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                tempDisplayItems.add(insertIndex, stack.copy());
+                tempSearchItems.add(stack.copy());
             }
         }
+
+        this.displayItems.clear();
+        this.displayItems.addAll(tempDisplayItems);
+
+        this.displayItemsSearchTab.clear();
+        this.displayItemsSearchTab.addAll(tempSearchItems);
     }
 
     @Inject(method = "buildContents", at = @At("HEAD"), cancellable = true)

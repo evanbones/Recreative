@@ -1,0 +1,62 @@
+---
+title: Advanced Item Placement
+hide_meta: true
+---
+
+# Advanced Item Placement
+
+When using `modify_tab` to add items to an existing tab, simply listing the item ID as a string will append it to the very end of the tab.
+
+However, Recreative allows you to define items as more complex objects to inject them exactly where you want relative to other items!
+
+### Syntax
+
+Instead of providing a string (e.g., `"minecraft:diamond"`), you provide an object with an `item` field, and optionally an `after` or `before` field.
+
+#### Example: Inserting after an item
+```json
+{
+  "action": "modify_tab",
+  "tabs": ["minecraft:building_blocks"],
+  "add_items": [
+    {
+      "item": "minecraft:diamond_block",
+      "after": "minecraft:iron_block"
+    }
+  ]
+}
+````
+
+*This places the Diamond Block immediately to the right of the Iron Block.*
+
+#### Example: Inserting before an item
+
+```json
+{
+  "action": "modify_tab",
+  "tabs": ["minecraft:building_blocks"],
+  "add_items": [
+    {
+      "item": "minecraft:emerald_block",
+      "before": "minecraft:gold_block"
+    }
+  ]
+}
+```
+
+*This shifts the Gold Block to the right to make room for the Emerald Block right before it.*
+
+### Mixing Simple and Advanced Syntax
+
+You can safely mix standard strings and advanced placement objects in the same `add_items` list:
+
+```json
+"add_items": [
+  "minecraft:apple",
+  {
+    "item": "minecraft:golden_apple",
+    "after": "minecraft:apple"
+  },
+  "minecraft:carrot"
+]
+```

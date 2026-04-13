@@ -1,0 +1,78 @@
+---
+title: Rule Actions
+hide_meta: true
+---
+
+# Rule Actions
+
+Recreative provides 4 main actions you can use in your JSON files to manipulate Creative Tabs.
+
+## 1. Removing Tabs (`remove_tab`)
+Hides specific tabs from the creative menu.
+
+```json
+{
+  "action": "remove_tab",
+  "tabs": [
+    "minecraft:food_and_drinks",
+    "minecraft:spawn_eggs"
+  ]
+}
+````
+
+## 2. Modifying Tabs (`modify_tab`)
+
+Allows you to alter existing tabs. You can rename them, change their icon, remove specific items, or inject new items into them.
+
+```json
+{
+  "action": "modify_tab",
+  "tabs": ["minecraft:combat"],
+  "name": "Weapons & Armor",
+  "icon": "minecraft:netherite_sword",
+  "remove_items": [
+    "minecraft:wooden_sword",
+    "minecraft:wooden_axe"
+  ],
+  "add_items": [
+    "minecraft:diamond",
+    "minecraft:emerald"
+  ]
+}
+```
+
+*(Note: To learn how to insert items in specific spots, check out [Advanced Item Placement](/project/recreative/docs/recreative/item_placement).*
+
+## 3. Creating Custom Tabs (`custom_tab`)
+
+Creates a brand new tab from scratch.
+
+```json
+{
+  "action": "custom_tab",
+  "tabs": ["my_pack:building_materials"],
+  "name": "Custom Building Mats",
+  "icon": "minecraft:bricks",
+  "add_items": [
+    "minecraft:stone",
+    "minecraft:cobblestone",
+    "minecraft:dirt"
+  ]
+}
+```
+
+## 4. Reordering Tabs (`tab_order`)
+
+Forces tabs to appear in a specific order from left to right. Any tabs not included in this list will naturally fall in after the ones you specify.
+
+```json
+{
+  "action": "tab_order",
+  "order": [
+    "minecraft:combat",
+    "minecraft:tools_and_utilities",
+    "my_pack:building_materials",
+    "minecraft:building_blocks"
+  ]
+}
+```

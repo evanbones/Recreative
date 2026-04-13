@@ -15,12 +15,11 @@ This command hot-reloads your `recreative_settings.json` and all the rule files 
 
 **Command:** `/recreative dump <target>`
 
-The dump command exports registry lists into nicely formatted JSON files located in the `config/recreative_exports` directory.
-
-Upon a successful dump, the command provides a clickable link in the chat to open the export folder directly.
+The dump command exports registry lists into nicely formatted JSON files located in the `config/recreative_exports` directory. Upon a successful dump, the command provides a clickable link in the chat to copy the export folder path directly to your clipboard.
 
 **Available targets:**
 * `tabs`: Exports all registered Creative Mode Tab IDs. This includes Vanilla tabs, tabs added by other mods, and your custom Recreative tabs.
 * `items`: Exports all registered Item IDs.
 * `blocks`: Exports all registered Block IDs.
+* `templates`: Generates ready-to-edit Recreative JSON template files for every registered tab. These files are populated with the current items of the tabs and are neatly organized in `config/recreative/tabs/<mod_id>/<tab_id>.json`. This is the easiest way to start modifying existing tabs!
 * `all`: Generates the tabs, items, and blocks dump files all at once.

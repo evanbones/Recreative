@@ -20,7 +20,7 @@ public class Recreative {
 
         CreativeTabManager.load();
 
-        if (FMLEnvironment.dist.isClient()) {
+        if (FMLEnvironment.getDist().isClient()) {
             ClientConfigSetup.register(modContainer);
         }
 

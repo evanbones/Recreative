@@ -17,7 +17,8 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.item.CreativeModeTab;
 
 import java.io.File;
@@ -31,7 +32,7 @@ public class RecreativeCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("recreative")
-                .requires(source -> source.hasPermission(2))
+                .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
                 .then(Commands.literal("reload")
                         .executes(context -> {
                             ModConfig.load();
@@ -85,7 +86,7 @@ public class RecreativeCommand {
 
     private static List<String> getTabs() {
         List<String> tabs = BuiltInRegistries.CREATIVE_MODE_TAB.keySet().stream()
-                .map(ResourceLocation::toString)
+                .map(Identifier::toString)
                 .collect(Collectors.toList());
 
         for (String customTab : CreativeTabManager.RUNTIME_TABS.keySet()) {
@@ -97,11 +98,11 @@ public class RecreativeCommand {
     }
 
     private static List<String> getItems() {
-        return BuiltInRegistries.ITEM.keySet().stream().map(ResourceLocation::toString).toList();
+        return BuiltInRegistries.ITEM.keySet().stream().map(Identifier::toString).toList();
     }
 
     private static List<String> getBlocks() {
-        return BuiltInRegistries.BLOCK.keySet().stream().map(ResourceLocation::toString).toList();
+        return BuiltInRegistries.BLOCK.keySet().stream().map(Identifier::toString).toList();
     }
 
     private static void dumpData(String filename, List<String> data) throws Exception {
@@ -123,8 +124,8 @@ public class RecreativeCommand {
                 .withStyle(Style.EMPTY
                         .withColor(ChatFormatting.GREEN)
                         .withUnderlined(true)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_FILE, dir.getAbsolutePath()))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("command.recreative.dump.hover")))
+                        .withClickEvent(new ClickEvent.OpenFile(dir.getAbsolutePath()))
+                        .withHoverEvent(new HoverEvent.ShowText(Component.translatable("command.recreative.dump.hover")))
                 );
 
         source.sendSuccess(() -> Component.translatable("command.recreative.dump.success", type).append(" ").append(link), false);

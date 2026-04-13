@@ -1,7 +1,7 @@
 package com.evandev.recreative.mixin;
 
-import net.fabricmc.fabric.impl.client.itemgroup.FabricCreativeGuiComponents;
-import net.fabricmc.fabric.impl.itemgroup.FabricItemGroupImpl;
+import net.fabricmc.fabric.impl.client.creativetab.FabricCreativeGuiComponents;
+import net.fabricmc.fabric.impl.creativetab.FabricCreativeModeTabImpl;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -16,7 +16,7 @@ public class FabricCreativeScreenMixin {
     @Inject(method = "init", at = @At("RETURN"))
     private void recreative$assignFabricPages(CallbackInfo ci) {
         for (CreativeModeTab tab : CreativeModeTabs.allTabs()) {
-            FabricItemGroupImpl fabricTab = (FabricItemGroupImpl) tab;
+            FabricCreativeModeTabImpl fabricTab = (FabricCreativeModeTabImpl) tab;
             try {
                 fabricTab.fabric_getPage();
             } catch (IllegalStateException e) {
@@ -26,10 +26,10 @@ public class FabricCreativeScreenMixin {
 
         int visibleCustomIndex = 0;
         for (CreativeModeTab tab : CreativeModeTabs.tabs()) {
-            if (FabricCreativeGuiComponents.COMMON_GROUPS.contains(tab)) continue;
+            if (FabricCreativeGuiComponents.COMMON_TABS.contains(tab)) continue;
 
             int page = visibleCustomIndex / 10;
-            ((FabricItemGroupImpl) tab).fabric_setPage(page);
+            ((FabricCreativeModeTabImpl) tab).fabric_setPage(page);
 
             visibleCustomIndex++;
         }

@@ -9,7 +9,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
@@ -67,18 +67,18 @@ public class CreativeTabManager {
             CreativeModeTab tab = Services.PLATFORM.buildCreativeTab(
                     Component.translatable(def.name),
                     () -> {
-                        Item iconItem = BuiltInRegistries.ITEM.get(ResourceLocation.parse(def.icon));
+                        Item iconItem = BuiltInRegistries.ITEM.getValue(Identifier.parse(def.icon));
                         return new ItemStack(iconItem);
                     },
                     (parameters, output) -> {
                         for (ItemEntry entry : def.addItems) {
                             if (entry.item.startsWith("#")) {
-                                TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(entry.item.substring(1)));
+                                TagKey<Item> tagKey = TagKey.create(Registries.ITEM, Identifier.parse(entry.item.substring(1)));
                                 for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
                                     output.accept(new ItemStack(holder.value()));
                                 }
                             } else {
-                                Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(entry.item));
+                                Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(entry.item));
                                 output.accept(new ItemStack(item));
                             }
                         }
@@ -170,7 +170,7 @@ public class CreativeTabManager {
     }
 
     public static String getTabId(CreativeModeTab tab) {
-        ResourceLocation key = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
+        Identifier key = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
         if (key != null) return key.toString();
 
         for (Map.Entry<String, CreativeModeTab> entry : RUNTIME_TABS.entrySet()) {

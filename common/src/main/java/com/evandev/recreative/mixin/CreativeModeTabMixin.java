@@ -8,7 +8,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
@@ -74,7 +74,7 @@ public abstract class CreativeModeTabMixin {
         String id = recreative$getTabId();
         CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
         if (modifier != null && modifier.icon != null && !modifier.icon.isEmpty()) {
-            Item customIcon = BuiltInRegistries.ITEM.get(ResourceLocation.parse(modifier.icon));
+            Item customIcon = BuiltInRegistries.ITEM.getValue(Identifier.parse(modifier.icon));
             cir.setReturnValue(new ItemStack(customIcon));
         }
     }
@@ -92,12 +92,12 @@ public abstract class CreativeModeTabMixin {
 
         if (!modifier.removeItems.isEmpty()) {
             Predicate<ItemStack> shouldRemove = stack -> {
-                ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                Identifier itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
                 if (modifier.removeItems.contains(itemId.toString())) return true;
 
                 for (String removal : modifier.removeItems) {
                     if (removal.startsWith("#")) {
-                        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(removal.substring(1)));
+                        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, Identifier.parse(removal.substring(1)));
                         if (stack.is(tagKey)) return true;
                     }
                 }
@@ -113,12 +113,12 @@ public abstract class CreativeModeTabMixin {
                 List<ItemStack> stacksToAdd = new ArrayList<>();
 
                 if (entry.item.startsWith("#")) {
-                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(entry.item.substring(1)));
+                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, Identifier.parse(entry.item.substring(1)));
                     for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
                         stacksToAdd.add(new ItemStack(holder.value()));
                     }
                 } else {
-                    Item itemToAdd = BuiltInRegistries.ITEM.get(ResourceLocation.parse(entry.item));
+                    Item itemToAdd = BuiltInRegistries.ITEM.getValue(Identifier.parse(entry.item));
                     stacksToAdd.add(new ItemStack(itemToAdd));
                 }
 

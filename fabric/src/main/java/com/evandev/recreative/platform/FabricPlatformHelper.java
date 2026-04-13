@@ -2,7 +2,7 @@ package com.evandev.recreative.platform;
 
 import com.evandev.recreative.platform.services.IPlatformHelper;
 import net.fabricmc.api.EnvType;
-import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
+import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
@@ -43,7 +43,7 @@ public class FabricPlatformHelper implements IPlatformHelper {
             Supplier<ItemStack> icon,
             CreativeModeTab.DisplayItemsGenerator displayItems) {
 
-        return FabricItemGroup.builder()
+        return FabricCreativeModeTab.builder()
                 .title(title)
                 .icon(icon)
                 .displayItems(displayItems)

@@ -1,1 +1,3 @@
-- Initial release.
+### Fixed
+
+- Added mod description.

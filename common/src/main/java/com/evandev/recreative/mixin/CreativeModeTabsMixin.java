@@ -2,8 +2,8 @@ package com.evandev.recreative.mixin;
 
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
+import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import org.spongepowered.asm.mixin.Mixin;
@@ -29,27 +29,73 @@ public class CreativeModeTabsMixin {
         if (!ModConfig.get().enabled) return;
 
         List<String> order = CreativeTabManager.getConfig().tabOrder;
-        List<CreativeModeTab> sorted = new ArrayList<>(BuiltInRegistries.CREATIVE_MODE_TAB.stream().toList());
+        List<String> removed = CreativeTabManager.getConfig().removedTabs;
+        List<CreativeModeTab> allTabs = new ArrayList<>(BuiltInRegistries.CREATIVE_MODE_TAB.stream().toList());
 
-        sorted.sort((t1, t2) -> {
-            ResourceLocation id1 = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(t1);
-            ResourceLocation id2 = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(t2);
-            int idx1 = (id1 != null && order != null) ? order.indexOf(id1.toString()) : -1;
-            int idx2 = (id2 != null && order != null) ? order.indexOf(id2.toString()) : -1;
-            if (idx1 == -1 && idx2 == -1) return 0;
-            if (idx1 == -1) return 1;
-            if (idx2 == -1) return -1;
-            return Integer.compare(idx1, idx2);
-        });
+        allTabs.sort((t1, t2) -> recreative$sortTabs(t1, t2, order, allTabs));
 
-        for (CreativeModeTab tab : sorted) {
-            ResourceLocation id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
-            String tabId = id != null ? id.toString() : "";
-
-            if (!SPECIAL_TABS.contains(tabId) && !CreativeTabManager.getConfig().removedTabs.contains(tabId) && tab.shouldDisplay()) {
+        for (CreativeModeTab tab : allTabs) {
+            String tabId = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            if (!SPECIAL_TABS.contains(tabId) && !removed.contains(tabId) && tab.shouldDisplay()) {
                 cir.setReturnValue(tab);
                 return;
             }
         }
+    }
+
+    @Inject(method = "tabs", at = @At("RETURN"), cancellable = true)
+    private static void recreative$repackTabs(CallbackInfoReturnable<List<CreativeModeTab>> cir) {
+        if (!ModConfig.get().enabled) return;
+
+        List<CreativeModeTab> original = new ArrayList<>(cir.getReturnValue());
+        List<CreativeModeTab> filtered = new ArrayList<>();
+        List<String> order = CreativeTabManager.getConfig().tabOrder;
+        List<String> removed = CreativeTabManager.getConfig().removedTabs;
+
+        for (CreativeModeTab tab : original) {
+            String id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            if (!removed.contains(id)) {
+                filtered.add(tab);
+            }
+        }
+
+        filtered.sort((t1, t2) -> recreative$sortTabs(t1, t2, order, original));
+
+        int visibleSlot = 0;
+        for (CreativeModeTab tab : filtered) {
+            String id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            if (SPECIAL_TABS.contains(id)) continue;
+
+            int pageSlot = visibleSlot % 10;
+            CreativeModeTab.Row row = pageSlot < 5 ? CreativeModeTab.Row.TOP : CreativeModeTab.Row.BOTTOM;
+            int column = pageSlot % 5;
+
+            ((CreativeModeTabAccessor) tab).setRow(row);
+            ((CreativeModeTabAccessor) tab).setColumn(column);
+            visibleSlot++;
+        }
+
+        cir.setReturnValue(filtered);
+    }
+
+    @Unique
+    private static int recreative$sortTabs(CreativeModeTab t1, CreativeModeTab t2, List<String> order, List<CreativeModeTab> nativeOrder) {
+        String id1 = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(t1).toString();
+        String id2 = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(t2).toString();
+
+        boolean spec1 = SPECIAL_TABS.contains(id1);
+        boolean spec2 = SPECIAL_TABS.contains(id2);
+        if (spec1 && !spec2) return 1;
+        if (!spec1 && spec2) return -1;
+
+        int idx1 = order != null ? order.indexOf(id1) : -1;
+        int idx2 = order != null ? order.indexOf(id2) : -1;
+
+        if (idx1 == -1 && idx2 == -1) {
+            return Integer.compare(nativeOrder.indexOf(t1), nativeOrder.indexOf(t2));
+        }
+        if (idx1 == -1) return 1;
+        if (idx2 == -1) return -1;
+        return Integer.compare(idx1, idx2);
     }
 }

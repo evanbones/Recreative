@@ -1,15 +1,34 @@
 package com.evandev.recreative.command;
 
+import com.evandev.recreative.Constants;
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabsAccessor;
+import com.evandev.recreative.platform.Services;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class RecreativeCommand {
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("recreative")
                 .requires(source -> source.hasPermission(2))
@@ -25,10 +44,89 @@ public class RecreativeCommand {
                                 }
                             }
 
-                            context.getSource().sendSuccess(() -> Component.literal("Recreative configs and tabs reloaded!"), true);
+                            context.getSource().sendSuccess(() -> Component.translatable("command.recreative.reload.success"), true);
                             return 1;
                         })
                 )
+                .then(Commands.literal("dump")
+                        .then(Commands.literal("tabs").executes(c -> executeDump(c, "tabs")))
+                        .then(Commands.literal("items").executes(c -> executeDump(c, "items")))
+                        .then(Commands.literal("blocks").executes(c -> executeDump(c, "blocks")))
+                        .then(Commands.literal("all").executes(c -> executeDump(c, "all")))
+                )
         );
+    }
+
+    private static int executeDump(CommandContext<CommandSourceStack> context, String type) {
+        CommandSourceStack source = context.getSource();
+        try {
+            if (type.equals("all")) {
+                dumpData("tabs", getTabs());
+                dumpData("items", getItems());
+                dumpData("blocks", getBlocks());
+                sendSuccessMessage(source, "all");
+            } else {
+                List<String> data = switch (type) {
+                    case "tabs" -> getTabs();
+                    case "items" -> getItems();
+                    case "blocks" -> getBlocks();
+                    default -> new ArrayList<>();
+                };
+                dumpData(type, data);
+                sendSuccessMessage(source, type);
+            }
+            return 1;
+        } catch (Exception e) {
+            Constants.LOG.error("Failed to dump data for: {}", type, e);
+            source.sendFailure(Component.translatable("command.recreative.dump.failure", type));
+            return 0;
+        }
+    }
+
+    private static List<String> getTabs() {
+        List<String> tabs = BuiltInRegistries.CREATIVE_MODE_TAB.keySet().stream()
+                .map(ResourceLocation::toString)
+                .collect(Collectors.toList());
+
+        for (String customTab : CreativeTabManager.RUNTIME_TABS.keySet()) {
+            if (!tabs.contains(customTab)) {
+                tabs.add(customTab);
+            }
+        }
+        return tabs;
+    }
+
+    private static List<String> getItems() {
+        return BuiltInRegistries.ITEM.keySet().stream().map(ResourceLocation::toString).toList();
+    }
+
+    private static List<String> getBlocks() {
+        return BuiltInRegistries.BLOCK.keySet().stream().map(ResourceLocation::toString).toList();
+    }
+
+    private static void dumpData(String filename, List<String> data) throws Exception {
+        File dir = Services.PLATFORM.getConfigDirectory().resolve("recreative_exports").toFile();
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new Exception("Failed to create exports directory.");
+        }
+
+        File file = new File(dir, filename + ".json");
+        try (FileWriter writer = new FileWriter(file)) {
+            GSON.toJson(data, writer);
+        }
+    }
+
+    private static void sendSuccessMessage(CommandSourceStack source, String type) {
+        File dir = Services.PLATFORM.getConfigDirectory().resolve("recreative_exports").toFile();
+
+        Component link = Component.literal("recreative_exports/")
+                .withStyle(Style.EMPTY
+                        .withColor(ChatFormatting.GREEN)
+                        .withUnderlined(true)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_FILE, dir.getAbsolutePath()))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("command.recreative.dump.hover")))
+                );
+
+        source.sendSuccess(() -> Component.translatable("command.recreative.dump.success", type).append(" ").append(link), false);
     }
 }

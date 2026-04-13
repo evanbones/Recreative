@@ -4,5 +4,10 @@
   "config.recreative.option.enabled": "Enable Mod",
   "config.recreative.option.enabled.tooltip": "Toggle the entire mod on or off.",
   "config.recreative.option.show_internal_ids": "Show Internal Tab IDs",
-  "config.recreative.option.show_internal_ids.tooltip": "Displays the registry ID of the tab instead of its translated name. Useful for configuring recreative_tabs.json."
+  "config.recreative.option.show_internal_ids.tooltip": "Displays the registry ID of the tab instead of its translated name. Useful for configuring recreative_tabs.json.",
+
+  "command.recreative.reload.success": "Recreative configs and tabs reloaded!",
+  "command.recreative.dump.success": "Successfully dumped %s to",
+  "command.recreative.dump.hover": "Click to open the exports folder",
+  "command.recreative.dump.failure": "Failed to dump %s! Check the log file for errors."
 }

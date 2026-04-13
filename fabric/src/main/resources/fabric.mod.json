@@ -8,21 +8,21 @@
     "${mod_author}"
   ],
   "contact": {
-    "homepage": "https://github.com/evanbones/Mod-Template",
-    "sources": "https://github.com/evanbones/Mod-Template"
+    "homepage": "https://github.com/evanbones/Recreative",
+    "sources": "https://github.com/evanbones/Recreative"
   },
   "license": "${license}",
   "icon": "${mod_id}.png",
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.evandev.mod_template.ExampleMod"
+      "com.evandev.recreative.Recreative"
     ],
     "client": [
-      "com.evandev.mod_template.client.ExampleModClient"
+      "com.evandev.recreative.client.RecreativeClient"
     ],
     "modmenu": [
-      "com.evandev.mod_template.compat.ModMenuIntegration"
+      "com.evandev.recreative.compat.ModMenuIntegration"
     ]
   },
   "mixins": [

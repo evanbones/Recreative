@@ -1,7 +1,7 @@
 {
-  "id": "mod-template",
+  "id": "recreative",
   "platforms": {
-    "curseforge": "mod-template",
-    "modrinth": "mod-template"
+    "curseforge": "recreative",
+    "modrinth": "recreative"
   }
 }

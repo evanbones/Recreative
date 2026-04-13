@@ -3,6 +3,7 @@ package com.evandev.recreative.mixin;
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.TabConfig;
+import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -23,14 +24,15 @@ import java.util.Set;
 @Mixin(CreativeModeTab.class)
 public abstract class CreativeModeTabMixin {
 
-    @Shadow private Collection<ItemStack> displayItems;
-    @Shadow private Set<ItemStack> displayItemsSearchTab;
+    @Shadow
+    private Collection<ItemStack> displayItems;
+    @Shadow
+    private Set<ItemStack> displayItemsSearchTab;
 
     @Unique
     private String recreative$getTabId() {
         CreativeModeTab self = (CreativeModeTab) (Object) this;
-        ResourceLocation id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(self);
-        return id != null ? id.toString() : "";
+        return CreativeTabManager.getTabId(self);
     }
 
     @Inject(method = "shouldDisplay", at = @At("HEAD"), cancellable = true)
@@ -97,6 +99,37 @@ public abstract class CreativeModeTabMixin {
                 this.displayItems.add(stack);
                 this.displayItemsSearchTab.add(stack);
             }
+        }
+    }
+
+    @Inject(method = "buildContents", at = @At("HEAD"), cancellable = true)
+    private void recreative$bypassRegistryCheck(CreativeModeTab.ItemDisplayParameters parameters, CallbackInfo ci) {
+        CreativeModeTab self = (CreativeModeTab) (Object) this;
+
+        if (CreativeTabManager.RUNTIME_TABS.containsValue(self)) {
+            Collection<ItemStack> displayItems = self.getDisplayItems();
+            Collection<ItemStack> searchItems = self.getSearchTabDisplayItems();
+
+            displayItems.clear();
+            searchItems.clear();
+
+            CreativeModeTab.Output output = (stack, visibility) -> {
+                if (stack.getCount() != 1) return;
+
+                if (stack.getItem().isEnabled(parameters.enabledFeatures())) {
+                    if (visibility != CreativeModeTab.TabVisibility.SEARCH_TAB_ONLY) {
+                        displayItems.add(stack);
+                    }
+                    if (visibility != CreativeModeTab.TabVisibility.PARENT_TAB_ONLY) {
+                        searchItems.add(stack);
+                    }
+                }
+            };
+
+            ((CreativeModeTabAccessor) self).getDisplayItemsGenerator().accept(parameters, output);
+
+            self.rebuildSearchTree();
+            ci.cancel();
         }
     }
 }

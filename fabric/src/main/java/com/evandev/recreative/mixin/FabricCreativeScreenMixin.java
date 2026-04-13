@@ -1,10 +1,10 @@
 package com.evandev.recreative.mixin;
 
 import com.evandev.recreative.config.ModConfig;
+import com.evandev.recreative.data.CreativeTabManager;
 import net.fabricmc.fabric.impl.client.itemgroup.FabricCreativeGuiComponents;
 import net.fabricmc.fabric.impl.itemgroup.FabricItemGroup;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import org.spongepowered.asm.mixin.Dynamic;
@@ -34,7 +34,7 @@ public class FabricCreativeScreenMixin {
         int visibleIndex = 0;
 
         for (CreativeModeTab tab : visibleTabs) {
-            String id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            String id = CreativeTabManager.getTabId(tab);
             if (SPECIAL_TABS.contains(id)) continue;
 
             int page = visibleIndex / 10;
@@ -49,7 +49,7 @@ public class FabricCreativeScreenMixin {
         if (!ModConfig.get().enabled) return;
 
         boolean hasExtraPages = CreativeModeTabs.tabs().stream().anyMatch(tab -> {
-            String id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            String id = CreativeTabManager.getTabId(tab);
             return !SPECIAL_TABS.contains(id) && ((FabricItemGroup) tab).getPage() > 0;
         });
 

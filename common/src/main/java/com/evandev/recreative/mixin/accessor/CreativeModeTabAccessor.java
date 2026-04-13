@@ -15,4 +15,7 @@ public interface CreativeModeTabAccessor {
     @Accessor("column")
     @Mutable
     void setColumn(int column);
+
+    @Accessor("displayItemsGenerator")
+    CreativeModeTab.DisplayItemsGenerator getDisplayItemsGenerator();
 }

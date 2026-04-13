@@ -8,6 +8,7 @@
     "CreativeModeTabMixin",
     "CreativeModeTabsMixin",
     "accessor.CreativeModeTabAccessor",
+    "accessor.CreativeModeTabsAccessor",
     "accessor.CreativeModeTabsInvoker"
   ],
   "client": [

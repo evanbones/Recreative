@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 @Mixin(CreativeModeTabs.class)
 public class CreativeModeTabsMixin {
@@ -30,12 +31,14 @@ public class CreativeModeTabsMixin {
 
         List<String> order = CreativeTabManager.getConfig().tabOrder;
         List<String> removed = CreativeTabManager.getConfig().removedTabs;
+
         List<CreativeModeTab> allTabs = new ArrayList<>(BuiltInRegistries.CREATIVE_MODE_TAB.stream().toList());
+        allTabs.addAll(CreativeTabManager.RUNTIME_TABS.values());
 
         allTabs.sort((t1, t2) -> recreative$sortTabs(t1, t2, order, allTabs));
 
         for (CreativeModeTab tab : allTabs) {
-            String tabId = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            String tabId = CreativeTabManager.getTabId(tab);
             if (!SPECIAL_TABS.contains(tabId) && !removed.contains(tabId) && tab.shouldDisplay()) {
                 cir.setReturnValue(tab);
                 return;
@@ -48,12 +51,19 @@ public class CreativeModeTabsMixin {
         if (!ModConfig.get().enabled) return;
 
         List<CreativeModeTab> original = new ArrayList<>(cir.getReturnValue());
+
+        for (CreativeModeTab customTab : CreativeTabManager.RUNTIME_TABS.values()) {
+            if (!original.contains(customTab)) {
+                original.add(customTab);
+            }
+        }
+
         List<CreativeModeTab> filtered = new ArrayList<>();
         List<String> order = CreativeTabManager.getConfig().tabOrder;
         List<String> removed = CreativeTabManager.getConfig().removedTabs;
 
         for (CreativeModeTab tab : original) {
-            String id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            String id = CreativeTabManager.getTabId(tab);
             if (!removed.contains(id)) {
                 filtered.add(tab);
             }
@@ -63,7 +73,7 @@ public class CreativeModeTabsMixin {
 
         int visibleSlot = 0;
         for (CreativeModeTab tab : filtered) {
-            String id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            String id = CreativeTabManager.getTabId(tab);
             if (SPECIAL_TABS.contains(id)) continue;
 
             int pageSlot = visibleSlot % 10;
@@ -78,10 +88,20 @@ public class CreativeModeTabsMixin {
         cir.setReturnValue(filtered);
     }
 
+    @Inject(method = "streamAllTabs", at = @At("RETURN"), cancellable = true)
+    private static void recreative$includeRuntimeTabsInStream(CallbackInfoReturnable<Stream<CreativeModeTab>> cir) {
+        if (!ModConfig.get().enabled) return;
+
+        Stream<CreativeModeTab> original = cir.getReturnValue();
+        Stream<CreativeModeTab> runtime = CreativeTabManager.RUNTIME_TABS.values().stream();
+
+        cir.setReturnValue(Stream.concat(original, runtime));
+    }
+
     @Unique
     private static int recreative$sortTabs(CreativeModeTab t1, CreativeModeTab t2, List<String> order, List<CreativeModeTab> nativeOrder) {
-        String id1 = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(t1).toString();
-        String id2 = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(t2).toString();
+        String id1 = CreativeTabManager.getTabId(t1);
+        String id2 = CreativeTabManager.getTabId(t2);
 
         boolean spec1 = SPECIAL_TABS.contains(id1);
         boolean spec2 = SPECIAL_TABS.contains(id2);

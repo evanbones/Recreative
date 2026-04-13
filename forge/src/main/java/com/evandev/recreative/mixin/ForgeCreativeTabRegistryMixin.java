@@ -2,7 +2,7 @@ package com.evandev.recreative.mixin;
 
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
-import net.minecraft.core.registries.BuiltInRegistries;
+import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraftforge.common.CreativeModeTabRegistry;
 import org.spongepowered.asm.mixin.Mixin;
@@ -27,21 +27,28 @@ public class ForgeCreativeTabRegistryMixin {
     private static void applyRecreativeSorting(CallbackInfoReturnable<List<CreativeModeTab>> cir) {
         if (!ModConfig.get().enabled) return;
 
-        List<CreativeModeTab> original = cir.getReturnValue();
+        List<CreativeModeTab> original = new ArrayList<>(cir.getReturnValue());
+
+        for (CreativeModeTab customTab : CreativeTabManager.RUNTIME_TABS.values()) {
+            if (!original.contains(customTab)) {
+                original.add(customTab);
+            }
+        }
+
         List<CreativeModeTab> filtered = new ArrayList<>();
         List<String> order = CreativeTabManager.getConfig().tabOrder;
         List<String> removed = CreativeTabManager.getConfig().removedTabs;
 
         for (CreativeModeTab tab : original) {
-            String id = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab).toString();
+            String id = CreativeTabManager.getTabId(tab);
             if (!removed.contains(id)) {
                 filtered.add(tab);
             }
         }
 
         filtered.sort((t1, t2) -> {
-            String id1 = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(t1).toString();
-            String id2 = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(t2).toString();
+            String id1 = CreativeTabManager.getTabId(t1);
+            String id2 = CreativeTabManager.getTabId(t2);
 
             boolean spec1 = SPECIAL_TABS.contains(id1);
             boolean spec2 = SPECIAL_TABS.contains(id2);
@@ -56,6 +63,21 @@ public class ForgeCreativeTabRegistryMixin {
             if (idx2 == -1) return -1;
             return Integer.compare(idx1, idx2);
         });
+
+        int visibleSlot = 0;
+        for (CreativeModeTab tab : filtered) {
+            String id = CreativeTabManager.getTabId(tab);
+            if (SPECIAL_TABS.contains(id)) continue;
+
+            int pageSlot = visibleSlot % 10;
+            CreativeModeTab.Row row = pageSlot < 5 ? CreativeModeTab.Row.TOP : CreativeModeTab.Row.BOTTOM;
+            int column = pageSlot % 5;
+
+            ((CreativeModeTabAccessor) tab).setRow(row);
+            ((CreativeModeTabAccessor) tab).setColumn(column);
+
+            visibleSlot++;
+        }
 
         cir.setReturnValue(filtered);
     }

@@ -47,7 +47,9 @@ Recreative watches the `./config/recreative/` folder in your Minecraft instance.
 Recreative provides a couple useful commands to help you manage your configuration and easily find IDs without leaving the game.
 
 * `/recreative reload` - Hot-reloads your `recreative_settings.json` and all rule files in the `config/recreative/` folder and instantly rebuilds the creative menu.
-* `/recreative dump <tabs|items|blocks|all>` - Exports registered IDs into nicely formatted JSON files located in `config/recreative_exports/`. Perfect for finding the exact namespace IDs needed for your scripts.
+* `/recreative dump <tabs|items|blocks|templates|all>` - Exports registered IDs into nicely formatted JSON files located in `config/recreative_exports/`. Perfect for finding the exact namespace IDs needed for your scripts.
+
+The `templates` dump converts all your currently registered tabs into the Recreative format in `config/recreative/tabs`.
 
 ## In-Game Settings
 

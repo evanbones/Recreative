@@ -20,7 +20,7 @@ Hides specific tabs from the creative menu.
 
 ## 2. Modifying Tabs (`modify_tab`)
 
-Allows you to alter existing tabs. You can rename them, change their icon, remove specific items, or inject new items into them.
+You can rename them, change their icon, remove specific items, or inject new items into them. You can also target specific Data Component variants (like enchanted books or potions)!
 
 ```json
 {
@@ -30,11 +30,25 @@ Allows you to alter existing tabs. You can rename them, change their icon, remov
   "icon": "minecraft:netherite_sword",
   "remove_items": [
     "minecraft:wooden_sword",
-    "minecraft:wooden_axe"
+    {
+      "item": "minecraft:enchanted_book",
+      "components": {
+        "minecraft:stored_enchantments": {
+          "levels": {
+            "minecraft:bane_of_arthropods": 1
+          }
+        }
+      }
+    }
   ],
   "add_items": [
     "minecraft:diamond",
-    "minecraft:emerald"
+    {
+      "item": "minecraft:potion",
+      "components": {
+        "minecraft:potion_contents": "minecraft:strong_healing"
+      }
+    }
   ]
 }
 ```

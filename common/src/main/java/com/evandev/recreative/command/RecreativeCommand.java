@@ -6,20 +6,24 @@ import com.evandev.recreative.data.Action;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
 import com.evandev.recreative.data.TabRule;
+import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabsAccessor;
 import com.evandev.recreative.platform.Services;
 import com.google.gson.*;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.ItemStack;
@@ -29,6 +33,7 @@ import java.io.FileWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RecreativeCommand {
@@ -37,13 +42,20 @@ public class RecreativeCommand {
             .registerTypeAdapter(Action.class, (JsonSerializer<Action>) (src, typeOfSrc, context) ->
                     new JsonPrimitive(src.name().toLowerCase()))
             .registerTypeAdapter(ItemEntry.class, (JsonSerializer<ItemEntry>) (src, typeOfSrc, context) -> {
-                if (src.after == null && src.before == null) {
+                if (src.after == null && src.before == null && src.components == null) {
                     return new JsonPrimitive(src.item);
                 }
                 JsonObject obj = new JsonObject();
                 obj.addProperty("item", src.item);
                 if (src.after != null) obj.addProperty("after", src.after);
                 if (src.before != null) obj.addProperty("before", src.before);
+                if (src.components != null) {
+                    try {
+                        obj.add("components", JsonParser.parseString(src.components));
+                    } catch (Exception e) {
+                        obj.addProperty("components", src.components);
+                    }
+                }
                 return obj;
             })
             .create();
@@ -58,8 +70,18 @@ public class RecreativeCommand {
 
                             CreativeModeTab.ItemDisplayParameters params = CreativeModeTabsAccessor.getCachedParameters();
                             if (params != null) {
+                                for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
+                                    try {
+                                        tab.buildContents(params);
+                                    } catch (Throwable ignored) {
+                                    }
+                                }
+
                                 for (CreativeModeTab tab : CreativeTabManager.RUNTIME_TABS.values()) {
-                                    tab.buildContents(params);
+                                    try {
+                                        tab.buildContents(params);
+                                    } catch (Throwable ignored) {
+                                    }
                                 }
                             }
 
@@ -75,6 +97,98 @@ public class RecreativeCommand {
                         .then(Commands.literal("all").executes(c -> executeDump(c, "all")))
                 )
         );
+    }
+
+    private static int executeDumpTemplates(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        try {
+            CreativeModeTab.ItemDisplayParameters dumpParams = new CreativeModeTab.ItemDisplayParameters(
+                    source.enabledFeatures(),
+                    source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER),
+                    source.registryAccess()
+            );
+
+            Path baseDir = Services.PLATFORM.getConfigDirectory().resolve("recreative").resolve("tabs");
+            Set<String> specialTabs = Set.of("minecraft:search", "minecraft:inventory", "minecraft:hotbar", "minecraft:op_blocks");
+
+            for (Identifier id : BuiltInRegistries.CREATIVE_MODE_TAB.keySet()) {
+                if (specialTabs.contains(id.toString())) continue;
+
+                CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(id);
+                if (tab == null) continue;
+
+                TabRule rule = new TabRule();
+                rule.action = Action.MODIFY_TAB;
+                rule.tabs.add(id.toString());
+
+                ItemStack iconStack = tab.getIconItem();
+                if (!iconStack.isEmpty()) {
+                    Identifier iconId = BuiltInRegistries.ITEM.getKey(iconStack.getItem());
+                    if (!iconId.toString().equals("minecraft:air")) {
+                        rule.icon = iconId.toString();
+                    }
+                }
+
+                List<ItemStack> serverItems = new ArrayList<>();
+                try {
+                    ((CreativeModeTabAccessor) tab).getDisplayItemsGenerator().accept(dumpParams, (stack, visibility) -> {
+                        if (visibility != CreativeModeTab.TabVisibility.SEARCH_TAB_ONLY) {
+                            serverItems.add(stack);
+                        }
+                    });
+                } catch (Throwable t) {
+                    Constants.LOG.error("Failed to safely generate items for tab {}", id, t);
+                }
+
+                for (ItemStack stack : serverItems) {
+                    if (stack.isEmpty() || stack.getCount() != 1) continue;
+                    Identifier itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+
+                    if (!itemId.toString().equals("minecraft:air")) {
+                        ItemEntry entry = new ItemEntry(itemId.toString());
+                        DataComponentPatch patch = stack.getComponentsPatch();
+
+                        if (!patch.isEmpty()) {
+                            try {
+                                JsonElement componentJson = DataComponentPatch.CODEC.encodeStart(
+                                        RegistryOps.create(JsonOps.INSTANCE, dumpParams.holders()),
+                                        patch
+                                ).getOrThrow(IllegalStateException::new);
+                                entry.components = componentJson.toString();
+                            } catch (Exception e) {
+                                Constants.LOG.error("Failed to serialize components for item {}", itemId, e);
+                            }
+                        }
+                        rule.addItems.add(entry);
+                    }
+                }
+
+                File modDir = baseDir.resolve(id.getNamespace()).toFile();
+                if (!modDir.exists() && !modDir.mkdirs()) {
+                    continue;
+                }
+
+                File file = new File(modDir, id.getPath() + ".json");
+                try (FileWriter writer = new FileWriter(file)) {
+                    GSON.toJson(List.of(rule), writer);
+                }
+            }
+
+            Component link = Component.literal("recreative/tabs/")
+                    .withStyle(Style.EMPTY
+                            .withColor(ChatFormatting.GREEN)
+                            .withUnderlined(true)
+                            .withClickEvent(new ClickEvent.CopyToClipboard(baseDir.toFile().getAbsolutePath()))
+                            .withHoverEvent(new HoverEvent.ShowText(Component.literal("Click to copy path to clipboard")))
+                    );
+
+            source.sendSuccess(() -> Component.translatable("command.recreative.dump.success", "templates").append(" ").append(link), false);
+            return 1;
+        } catch (Exception e) {
+            Constants.LOG.error("Failed to dump tab templates", e);
+            source.sendFailure(Component.translatable("command.recreative.dump.failure", "templates"));
+            return 0;
+        }
     }
 
     private static int executeDump(CommandContext<CommandSourceStack> context, String type) {
@@ -99,68 +213,6 @@ public class RecreativeCommand {
         } catch (Exception e) {
             Constants.LOG.error("Failed to dump data for: {}", type, e);
             source.sendFailure(Component.translatable("command.recreative.dump.failure", type));
-            return 0;
-        }
-    }
-
-    private static int executeDumpTemplates(CommandContext<CommandSourceStack> context) {
-        CommandSourceStack source = context.getSource();
-        try {
-            CreativeModeTab.ItemDisplayParameters params = CreativeModeTabsAccessor.getCachedParameters();
-            Path baseDir = Services.PLATFORM.getConfigDirectory().resolve("recreative").resolve("tabs");
-
-            for (Identifier id : BuiltInRegistries.CREATIVE_MODE_TAB.keySet()) {
-                CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(id);
-                if (tab == null) continue;
-
-                if (params != null && tab.getDisplayItems().isEmpty()) {
-                    tab.buildContents(params);
-                }
-
-                TabRule rule = new TabRule();
-                rule.action = Action.MODIFY_TAB;
-                rule.tabs.add(id.toString());
-
-                ItemStack iconStack = tab.getIconItem();
-                if (!iconStack.isEmpty()) {
-                    Identifier iconId = BuiltInRegistries.ITEM.getKey(iconStack.getItem());
-                    if (iconId != null) {
-                        rule.icon = iconId.toString();
-                    }
-                }
-
-                for (ItemStack stack : tab.getDisplayItems()) {
-                    Identifier itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                    if (itemId != null) {
-                        rule.addItems.add(new ItemEntry(itemId.toString()));
-                    }
-                }
-
-                File modDir = baseDir.resolve(id.getNamespace()).toFile();
-                if (!modDir.exists() && !modDir.mkdirs()) {
-                    Constants.LOG.error("Failed to create directory: {}", modDir);
-                    continue;
-                }
-
-                File file = new File(modDir, id.getPath() + ".json");
-                try (FileWriter writer = new FileWriter(file)) {
-                    GSON.toJson(List.of(rule), writer);
-                }
-            }
-
-            Component link = Component.literal("recreative/tabs/")
-                    .withStyle(Style.EMPTY
-                            .withColor(ChatFormatting.GREEN)
-                            .withUnderlined(true)
-                            .withClickEvent(new ClickEvent.CopyToClipboard(baseDir.toFile().getAbsolutePath()))
-                            .withHoverEvent(new HoverEvent.ShowText(Component.literal("Click to copy path to clipboard")))
-                    );
-
-            source.sendSuccess(() -> Component.translatable("command.recreative.dump.success", "templates").append(" ").append(link), false);
-            return 1;
-        } catch (Exception e) {
-            Constants.LOG.error("Failed to dump tab templates", e);
-            source.sendFailure(Component.translatable("command.recreative.dump.failure", "templates"));
             return 0;
         }
     }

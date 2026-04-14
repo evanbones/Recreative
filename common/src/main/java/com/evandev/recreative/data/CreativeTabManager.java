@@ -5,11 +5,14 @@ import com.evandev.recreative.platform.Services;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
@@ -72,14 +75,36 @@ public class CreativeTabManager {
                     },
                     (parameters, output) -> {
                         for (ItemEntry entry : def.addItems) {
+                            if (entry == null || entry.item == null) continue;
+
+                            List<ItemStack> stacksToAdd = new ArrayList<>();
+
                             if (entry.item.startsWith("#")) {
                                 TagKey<Item> tagKey = TagKey.create(Registries.ITEM, Identifier.parse(entry.item.substring(1)));
                                 for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
-                                    output.accept(new ItemStack(holder.value()));
+                                    stacksToAdd.add(new ItemStack(holder.value()));
                                 }
                             } else {
                                 Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(entry.item));
-                                output.accept(new ItemStack(item));
+                                stacksToAdd.add(new ItemStack(item));
+                            }
+
+                            for (ItemStack stack : stacksToAdd) {
+                                if (stack.isEmpty() || stack.getCount() != 1) continue;
+
+                                if (entry.components != null) {
+                                    try {
+                                        JsonElement componentJson = JsonParser.parseString(entry.components);
+                                        DataComponentPatch patch = DataComponentPatch.CODEC.parse(
+                                                RegistryOps.create(JsonOps.INSTANCE, parameters.holders()),
+                                                componentJson
+                                        ).result().orElseThrow();
+                                        stack.applyComponents(patch);
+                                    } catch (Exception e) {
+                                        Constants.LOG.error("Failed to parse components for item {}", entry.item, e);
+                                    }
+                                }
+                                output.accept(stack);
                             }
                         }
                     }
@@ -180,7 +205,7 @@ public class CreativeTabManager {
     }
 
     public static class TabModifier {
-        public final List<String> removeItems = new ArrayList<>();
+        public final List<ItemEntry> removeItems = new ArrayList<>();
         public final List<ItemEntry> addItems = new ArrayList<>();
         public String name;
         public String icon;
@@ -193,9 +218,14 @@ public class CreativeTabManager {
                 return new ItemEntry(json.getAsString());
             } else if (json.isJsonObject()) {
                 JsonObject obj = json.getAsJsonObject();
+                if (!obj.has("item")) return null;
                 ItemEntry entry = new ItemEntry(obj.get("item").getAsString());
                 if (obj.has("after")) entry.after = obj.get("after").getAsString();
                 if (obj.has("before")) entry.before = obj.get("before").getAsString();
+                if (obj.has("components")) {
+                    JsonElement comp = obj.get("components");
+                    entry.components = comp.isJsonObject() ? comp.toString() : comp.getAsString();
+                }
                 return entry;
             }
             return null;
@@ -218,10 +248,12 @@ public class CreativeTabManager {
             List<ItemEntry> list = new ArrayList<>();
             if (json.isJsonArray()) {
                 for (JsonElement e : json.getAsJsonArray()) {
-                    list.add(context.deserialize(e, ItemEntry.class));
+                    ItemEntry entry = context.deserialize(e, ItemEntry.class);
+                    if (entry != null) list.add(entry);
                 }
             } else {
-                list.add(context.deserialize(json, ItemEntry.class));
+                ItemEntry entry = context.deserialize(json, ItemEntry.class);
+                if (entry != null) list.add(entry);
             }
             return list;
         }

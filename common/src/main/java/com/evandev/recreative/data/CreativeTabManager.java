@@ -72,14 +72,32 @@ public class CreativeTabManager {
                     },
                     (parameters, output) -> {
                         for (ItemEntry entry : def.addItems) {
+                            if (entry == null || entry.item == null) continue;
+
                             if (entry.item.startsWith("#")) {
                                 TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(entry.item.substring(1)));
                                 for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
-                                    output.accept(new ItemStack(holder.value()));
+                                    ItemStack stack = new ItemStack(holder.value());
+                                    if (stack.isEmpty() || stack.getCount() != 1) continue;
+                                    if (entry.nbt != null) {
+                                        try {
+                                            stack.setTag(net.minecraft.nbt.TagParser.parseTag(entry.nbt));
+                                        } catch (Exception ignored) {
+                                        }
+                                    }
+                                    output.accept(stack);
                                 }
                             } else {
                                 Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
-                                output.accept(new ItemStack(item));
+                                ItemStack stack = new ItemStack(item);
+                                if (stack.isEmpty() || stack.getCount() != 1) continue;
+                                if (entry.nbt != null) {
+                                    try {
+                                        stack.setTag(net.minecraft.nbt.TagParser.parseTag(entry.nbt));
+                                    } catch (Exception ignored) {
+                                    }
+                                }
+                                output.accept(stack);
                             }
                         }
                     }
@@ -180,7 +198,7 @@ public class CreativeTabManager {
     }
 
     public static class TabModifier {
-        public final List<String> removeItems = new ArrayList<>();
+        public final List<ItemEntry> removeItems = new ArrayList<>();
         public final List<ItemEntry> addItems = new ArrayList<>();
         public String name;
         public String icon;
@@ -193,9 +211,14 @@ public class CreativeTabManager {
                 return new ItemEntry(json.getAsString());
             } else if (json.isJsonObject()) {
                 JsonObject obj = json.getAsJsonObject();
+                if (!obj.has("item")) return null;
                 ItemEntry entry = new ItemEntry(obj.get("item").getAsString());
                 if (obj.has("after")) entry.after = obj.get("after").getAsString();
                 if (obj.has("before")) entry.before = obj.get("before").getAsString();
+                if (obj.has("nbt")) {
+                    JsonElement nbt = obj.get("nbt");
+                    entry.nbt = nbt.isJsonObject() ? nbt.toString() : nbt.getAsString();
+                }
                 return entry;
             }
             return null;
@@ -218,10 +241,12 @@ public class CreativeTabManager {
             List<ItemEntry> list = new ArrayList<>();
             if (json.isJsonArray()) {
                 for (JsonElement e : json.getAsJsonArray()) {
-                    list.add(context.deserialize(e, ItemEntry.class));
+                    ItemEntry entry = context.deserialize(e, ItemEntry.class);
+                    if (entry != null) list.add(entry);
                 }
             } else {
-                list.add(context.deserialize(json, ItemEntry.class));
+                ItemEntry entry = context.deserialize(json, ItemEntry.class);
+                if (entry != null) list.add(entry);
             }
             return list;
         }

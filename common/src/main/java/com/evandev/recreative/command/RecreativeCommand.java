@@ -28,6 +28,7 @@ import java.io.FileWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RecreativeCommand {
@@ -36,13 +37,14 @@ public class RecreativeCommand {
             .registerTypeAdapter(Action.class, (JsonSerializer<Action>) (src, typeOfSrc, context) ->
                     new JsonPrimitive(src.name().toLowerCase()))
             .registerTypeAdapter(ItemEntry.class, (JsonSerializer<ItemEntry>) (src, typeOfSrc, context) -> {
-                if (src.after == null && src.before == null) {
+                if (src.after == null && src.before == null && src.nbt == null) {
                     return new JsonPrimitive(src.item);
                 }
                 JsonObject obj = new JsonObject();
                 obj.addProperty("item", src.item);
                 if (src.after != null) obj.addProperty("after", src.after);
                 if (src.before != null) obj.addProperty("before", src.before);
+                if (src.nbt != null) obj.addProperty("nbt", src.nbt);
                 return obj;
             })
             .create();
@@ -57,8 +59,18 @@ public class RecreativeCommand {
 
                             CreativeModeTab.ItemDisplayParameters params = CreativeModeTabsAccessor.getCachedParameters();
                             if (params != null) {
+                                for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
+                                    try {
+                                        tab.buildContents(params);
+                                    } catch (Throwable ignored) {
+                                    }
+                                }
+
                                 for (CreativeModeTab tab : CreativeTabManager.RUNTIME_TABS.values()) {
-                                    tab.buildContents(params);
+                                    try {
+                                        tab.buildContents(params);
+                                    } catch (Throwable ignored) {
+                                    }
                                 }
                             }
 
@@ -107,13 +119,19 @@ public class RecreativeCommand {
         try {
             CreativeModeTab.ItemDisplayParameters params = CreativeModeTabsAccessor.getCachedParameters();
             Path baseDir = Services.PLATFORM.getConfigDirectory().resolve("recreative").resolve("tabs");
+            Set<String> specialTabs = Set.of("minecraft:search", "minecraft:inventory", "minecraft:hotbar", "minecraft:op_blocks");
 
             for (ResourceLocation id : BuiltInRegistries.CREATIVE_MODE_TAB.keySet()) {
+                if (specialTabs.contains(id.toString())) continue;
+
                 CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.get(id);
                 if (tab == null) continue;
 
                 if (params != null && tab.getDisplayItems().isEmpty()) {
-                    tab.buildContents(params);
+                    try {
+                        tab.buildContents(params);
+                    } catch (Throwable ignored) {
+                    }
                 }
 
                 TabRule rule = new TabRule();
@@ -123,15 +141,21 @@ public class RecreativeCommand {
                 ItemStack iconStack = tab.getIconItem();
                 if (!iconStack.isEmpty()) {
                     ResourceLocation iconId = BuiltInRegistries.ITEM.getKey(iconStack.getItem());
-                    if (iconId != null) {
+                    if (iconId != null && !iconId.toString().equals("minecraft:air")) {
                         rule.icon = iconId.toString();
                     }
                 }
 
                 for (ItemStack stack : tab.getDisplayItems()) {
+                    if (stack.isEmpty() || stack.getCount() != 1) continue;
                     ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                    if (itemId != null) {
-                        rule.addItems.add(new ItemEntry(itemId.toString()));
+
+                    if (itemId != null && !itemId.toString().equals("minecraft:air")) {
+                        ItemEntry entry = new ItemEntry(itemId.toString());
+                        if (stack.hasTag()) {
+                            entry.nbt = stack.getTag().toString();
+                        }
+                        rule.addItems.add(entry);
                     }
                 }
 

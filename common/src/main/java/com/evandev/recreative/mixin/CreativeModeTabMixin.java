@@ -1,5 +1,6 @@
 package com.evandev.recreative.mixin;
 
+import com.evandev.recreative.Constants;
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
@@ -7,6 +8,9 @@ import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
@@ -93,12 +97,30 @@ public abstract class CreativeModeTabMixin {
         if (!modifier.removeItems.isEmpty()) {
             Predicate<ItemStack> shouldRemove = stack -> {
                 ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                if (modifier.removeItems.contains(itemId.toString())) return true;
+                String idStr = itemId.toString();
 
-                for (String removal : modifier.removeItems) {
-                    if (removal.startsWith("#")) {
-                        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(removal.substring(1)));
-                        if (stack.is(tagKey)) return true;
+                for (ItemEntry removal : modifier.removeItems) {
+                    if (removal == null || removal.item == null) continue;
+                    boolean match = false;
+
+                    if (removal.item.startsWith("#")) {
+                        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(removal.item.substring(1)));
+                        if (stack.is(tagKey)) match = true;
+                    } else if (idStr.equals(removal.item)) {
+                        match = true;
+                    }
+
+                    if (match) {
+                        if (removal.nbt != null) {
+                            try {
+                                CompoundTag tag = TagParser.parseTag(removal.nbt);
+                                if (NbtUtils.compareNbt(tag, stack.getTag(), true)) return true;
+                            } catch (Exception e) {
+                                // ignore unparseable NBT during remove iteration
+                            }
+                        } else {
+                            return true;
+                        }
                     }
                 }
                 return false;
@@ -110,6 +132,8 @@ public abstract class CreativeModeTabMixin {
 
         if (!modifier.addItems.isEmpty()) {
             for (ItemEntry entry : modifier.addItems) {
+                if (entry == null || entry.item == null) continue;
+
                 List<ItemStack> stacksToAdd = new ArrayList<>();
 
                 if (entry.item.startsWith("#")) {
@@ -123,6 +147,16 @@ public abstract class CreativeModeTabMixin {
                 }
 
                 for (ItemStack stack : stacksToAdd) {
+                    if (stack.isEmpty() || stack.getCount() != 1) continue;
+
+                    if (entry.nbt != null) {
+                        try {
+                            stack.setTag(TagParser.parseTag(entry.nbt));
+                        } catch (Exception e) {
+                            Constants.LOG.error("Failed to parse NBT for item {}", entry.item, e);
+                        }
+                    }
+
                     int insertIndex = tempDisplayItems.size();
                     if (entry.after != null) {
                         for (int i = 0; i < tempDisplayItems.size(); i++) {
@@ -178,7 +212,11 @@ public abstract class CreativeModeTabMixin {
 
             ((CreativeModeTabAccessor) self).getDisplayItemsGenerator().accept(parameters, output);
 
-            self.rebuildSearchTree();
+            try {
+                self.rebuildSearchTree();
+            } catch (Throwable t) {
+                // ignore tooltips/text evaluations throwing errors when reloaded from the server thread
+            }
             ci.cancel();
         }
     }

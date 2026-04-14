@@ -1,13 +1,20 @@
 package com.evandev.recreative.mixin;
 
+import com.evandev.recreative.Constants;
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
@@ -21,10 +28,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Predicate;
 
 @Mixin(CreativeModeTab.class)
@@ -93,12 +97,49 @@ public abstract class CreativeModeTabMixin {
         if (!modifier.removeItems.isEmpty()) {
             Predicate<ItemStack> shouldRemove = stack -> {
                 ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                if (modifier.removeItems.contains(itemId.toString())) return true;
+                String idStr = itemId.toString();
 
-                for (String removal : modifier.removeItems) {
-                    if (removal.startsWith("#")) {
-                        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(removal.substring(1)));
-                        if (stack.is(tagKey)) return true;
+                for (ItemEntry removal : modifier.removeItems) {
+                    if (removal == null || removal.item == null) continue;
+                    boolean match = false;
+
+                    if (removal.item.startsWith("#")) {
+                        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(removal.item.substring(1)));
+                        if (stack.is(tagKey)) match = true;
+                    } else if (idStr.equals(removal.item)) {
+                        match = true;
+                    }
+
+                    if (match) {
+                        if (removal.components != null) {
+                            try {
+                                JsonElement componentJson = JsonParser.parseString(removal.components);
+                                DataComponentPatch patch = DataComponentPatch.CODEC.parse(
+                                        RegistryOps.create(JsonOps.INSTANCE, parameters.holders()),
+                                        componentJson
+                                ).result().orElseThrow();
+
+                                boolean componentsMatch = true;
+                                for (Map.Entry<DataComponentType<?>, Optional<?>> patchEntry : patch.entrySet()) {
+                                    if (patchEntry.getValue().isPresent()) {
+                                        if (!Objects.equals(stack.get(patchEntry.getKey()), patchEntry.getValue().get())) {
+                                            componentsMatch = false;
+                                            break;
+                                        }
+                                    } else {
+                                        if (stack.has(patchEntry.getKey())) {
+                                            componentsMatch = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (componentsMatch) return true;
+                            } catch (Exception e) {
+                                // ignore unparseable components during remove iteration
+                            }
+                        } else {
+                            return true;
+                        }
                     }
                 }
                 return false;
@@ -110,6 +151,8 @@ public abstract class CreativeModeTabMixin {
 
         if (!modifier.addItems.isEmpty()) {
             for (ItemEntry entry : modifier.addItems) {
+                if (entry == null || entry.item == null) continue;
+
                 List<ItemStack> stacksToAdd = new ArrayList<>();
 
                 if (entry.item.startsWith("#")) {
@@ -123,6 +166,21 @@ public abstract class CreativeModeTabMixin {
                 }
 
                 for (ItemStack stack : stacksToAdd) {
+                    if (stack.isEmpty() || stack.getCount() != 1) continue;
+
+                    if (entry.components != null) {
+                        try {
+                            JsonElement componentJson = JsonParser.parseString(entry.components);
+                            DataComponentPatch patch = DataComponentPatch.CODEC.parse(
+                                    RegistryOps.create(JsonOps.INSTANCE, parameters.holders()),
+                                    componentJson
+                            ).result().orElseThrow();
+                            stack.applyComponents(patch);
+                        } catch (Exception e) {
+                            Constants.LOG.error("Failed to parse components for item {}", entry.item, e);
+                        }
+                    }
+
                     int insertIndex = tempDisplayItems.size();
                     if (entry.after != null) {
                         for (int i = 0; i < tempDisplayItems.size(); i++) {

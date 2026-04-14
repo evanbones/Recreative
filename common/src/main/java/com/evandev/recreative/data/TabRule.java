@@ -15,7 +15,7 @@ public class TabRule {
     public String icon;
 
     @SerializedName(value = "remove_items")
-    public List<String> removeItems = new ArrayList<>();
+    public List<ItemEntry> removeItems = new ArrayList<>();
 
     @SerializedName(value = "add_items", alternate = {"items"})
     public List<ItemEntry> addItems = new ArrayList<>();

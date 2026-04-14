@@ -9,23 +9,30 @@ However, Recreative allows you to define items as more complex objects to inject
 
 ### Syntax
 
-Instead of providing a string (e.g., `"minecraft:diamond"`), you provide an object with an `item` field, and optionally an `after` or `before` field.
+Instead of providing a string (e.g., `"minecraft:diamond"`), you provide an object with an `item` field, and optionally an `after`, `before`, or `components` field.
 
-#### Example: Inserting after an item
+#### Example: Inserting after an item with Component Data
 ```json
 {
   "action": "modify_tab",
   "tabs": ["minecraft:building_blocks"],
   "add_items": [
     {
-      "item": "minecraft:diamond_block", // Also supports item tabs like "#minecraft:logs"
+      "item": "minecraft:enchanted_book",
+      "components": {
+        "minecraft:stored_enchantments": {
+          "levels": {
+            "minecraft:mending": 1
+          }
+        }
+      },
       "after": "minecraft:iron_block"
     }
   ]
 }
-````
+```
 
-*This places the Diamond Block immediately to the right of the Iron Block.*
+*This places the Mending Book immediately to the right of the Iron Block.*
 
 #### Example: Inserting before an item
 
@@ -35,7 +42,7 @@ Instead of providing a string (e.g., `"minecraft:diamond"`), you provide an obje
   "tabs": ["minecraft:building_blocks"],
   "add_items": [
     {
-      "item": "minecraft:emerald_block", // Also supports item tags
+      "item": "minecraft:emerald_block", // Also supports item tags like "#minecraft:logs"
       "before": "minecraft:gold_block"
     }
   ]

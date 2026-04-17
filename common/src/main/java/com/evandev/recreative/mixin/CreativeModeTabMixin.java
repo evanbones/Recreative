@@ -66,6 +66,8 @@ public abstract class CreativeModeTabMixin {
         }
 
         CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
+        if (modifier == null) modifier = CreativeTabManager.CUSTOM_TABS_DEFS.get(id);
+
         if (modifier != null && modifier.name != null && !modifier.name.isEmpty()) {
             cir.setReturnValue(Component.translatable(modifier.name));
         }
@@ -77,6 +79,8 @@ public abstract class CreativeModeTabMixin {
 
         String id = recreative$getTabId();
         CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
+        if (modifier == null) modifier = CreativeTabManager.CUSTOM_TABS_DEFS.get(id);
+
         if (modifier != null && modifier.icon != null && !modifier.icon.isEmpty()) {
             Item customIcon = BuiltInRegistries.ITEM.get(ResourceLocation.parse(modifier.icon));
             cir.setReturnValue(new ItemStack(customIcon));
@@ -135,7 +139,7 @@ public abstract class CreativeModeTabMixin {
                                 }
                                 if (componentsMatch) return true;
                             } catch (Exception e) {
-                                // ignore unparseable components during remove iteration
+                                // Ignore unparseable components during remove iteration
                             }
                         } else {
                             return true;

@@ -15,7 +15,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 @Mixin(CreativeModeTabs.class)
 public class CreativeModeTabsMixin {
@@ -52,12 +51,6 @@ public class CreativeModeTabsMixin {
 
         List<CreativeModeTab> original = new ArrayList<>(cir.getReturnValue());
 
-        for (CreativeModeTab customTab : CreativeTabManager.RUNTIME_TABS.values()) {
-            if (!original.contains(customTab)) {
-                original.add(customTab);
-            }
-        }
-
         List<CreativeModeTab> filtered = new ArrayList<>();
         List<String> order = CreativeTabManager.TAB_ORDER;
         Set<String> removed = CreativeTabManager.REMOVED_TABS;
@@ -86,16 +79,6 @@ public class CreativeModeTabsMixin {
         }
 
         cir.setReturnValue(filtered);
-    }
-
-    @Inject(method = "streamAllTabs", at = @At("RETURN"), cancellable = true)
-    private static void recreative$includeRuntimeTabsInStream(CallbackInfoReturnable<Stream<CreativeModeTab>> cir) {
-        if (!ModConfig.get().enabled) return;
-
-        Stream<CreativeModeTab> original = cir.getReturnValue();
-        Stream<CreativeModeTab> runtime = CreativeTabManager.RUNTIME_TABS.values().stream();
-
-        cir.setReturnValue(Stream.concat(original, runtime));
     }
 
     @Unique

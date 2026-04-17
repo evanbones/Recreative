@@ -29,12 +29,6 @@ public class ForgeCreativeTabRegistryMixin {
 
         List<CreativeModeTab> original = new ArrayList<>(cir.getReturnValue());
 
-        for (CreativeModeTab customTab : CreativeTabManager.RUNTIME_TABS.values()) {
-            if (!original.contains(customTab)) {
-                original.add(customTab);
-            }
-        }
-
         List<CreativeModeTab> filtered = new ArrayList<>();
         List<String> order = CreativeTabManager.TAB_ORDER;
         Set<String> removed = CreativeTabManager.REMOVED_TABS;

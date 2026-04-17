@@ -1,13 +1,16 @@
 package com.evandev.recreative.data;
 
 import com.evandev.recreative.Constants;
+import com.evandev.recreative.mixin.accessor.MappedRegistryAccessor;
 import com.evandev.recreative.platform.Services;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
 import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
@@ -64,45 +67,77 @@ public class CreativeTabManager {
         }
 
         CUSTOM_TABS_DEFS.forEach((id, def) -> {
-            CreativeModeTab tab = Services.PLATFORM.buildCreativeTab(
-                    Component.translatable(def.name),
-                    () -> {
-                        Item iconItem = BuiltInRegistries.ITEM.get(new ResourceLocation(def.icon));
-                        return new ItemStack(iconItem);
-                    },
-                    (parameters, output) -> {
-                        for (ItemEntry entry : def.addItems) {
-                            if (entry == null || entry.item == null) continue;
+            ResourceLocation tabId = new ResourceLocation(id);
+            CreativeModeTab existingTab = BuiltInRegistries.CREATIVE_MODE_TAB.get(tabId);
 
-                            if (entry.item.startsWith("#")) {
-                                TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(entry.item.substring(1)));
-                                for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
-                                    ItemStack stack = new ItemStack(holder.value());
+            CreativeModeTab tabToUse;
+
+            if (existingTab != null) {
+                tabToUse = existingTab;
+            } else {
+                tabToUse = Services.PLATFORM.buildCreativeTab(
+                        Component.translatable(def.name),
+                        () -> {
+                            TabModifier currentDef = CUSTOM_TABS_DEFS.get(id);
+                            String iconId = (currentDef != null && currentDef.icon != null) ? currentDef.icon : "minecraft:stone";
+                            Item iconItem = BuiltInRegistries.ITEM.get(new ResourceLocation(iconId));
+                            return new ItemStack(iconItem);
+                        },
+                        (parameters, output) -> {
+                            TabModifier currentDef = CUSTOM_TABS_DEFS.get(id);
+                            if (currentDef == null) return;
+
+                            for (ItemEntry entry : currentDef.addItems) {
+                                if (entry == null || entry.item == null) continue;
+
+                                if (entry.item.startsWith("#")) {
+                                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, new ResourceLocation(entry.item.substring(1)));
+                                    for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
+                                        ItemStack stack = new ItemStack(holder.value());
+                                        if (stack.isEmpty() || stack.getCount() != 1) continue;
+                                        if (entry.nbt != null) {
+                                            try {
+                                                stack.setTag(TagParser.parseTag(entry.nbt));
+                                            } catch (Exception ignored) {
+                                            }
+                                        }
+                                        output.accept(stack);
+                                    }
+                                } else {
+                                    Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
+                                    ItemStack stack = new ItemStack(item);
                                     if (stack.isEmpty() || stack.getCount() != 1) continue;
                                     if (entry.nbt != null) {
                                         try {
-                                            stack.setTag(net.minecraft.nbt.TagParser.parseTag(entry.nbt));
+                                            stack.setTag(TagParser.parseTag(entry.nbt));
                                         } catch (Exception ignored) {
                                         }
                                     }
                                     output.accept(stack);
                                 }
-                            } else {
-                                Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(entry.item));
-                                ItemStack stack = new ItemStack(item);
-                                if (stack.isEmpty() || stack.getCount() != 1) continue;
-                                if (entry.nbt != null) {
-                                    try {
-                                        stack.setTag(net.minecraft.nbt.TagParser.parseTag(entry.nbt));
-                                    } catch (Exception ignored) {
-                                    }
-                                }
-                                output.accept(stack);
                             }
                         }
+                );
+
+                boolean wasFrozen = false;
+                MappedRegistryAccessor registryAccessor = null;
+
+                if (BuiltInRegistries.CREATIVE_MODE_TAB instanceof MappedRegistryAccessor accessor) {
+                    registryAccessor = accessor;
+                    wasFrozen = registryAccessor.isFrozen();
+                    if (wasFrozen) {
+                        registryAccessor.setFrozen(false);
                     }
-            );
-            RUNTIME_TABS.put(id, tab);
+                }
+
+                Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, tabId, tabToUse);
+
+                if (wasFrozen) {
+                    registryAccessor.setFrozen(true);
+                }
+            }
+
+            RUNTIME_TABS.put(id, tabToUse);
         });
 
         Constants.LOG.info("Loaded Recreative tabs configuration!");

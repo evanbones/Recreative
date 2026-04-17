@@ -1,3 +1,3 @@
-### Added
+### Fixed
 
-- Added proper support for NBT in tab additions/removals.
+- Switched to a safer dynamic tab registration system, fixing a crash with Supplementaries.

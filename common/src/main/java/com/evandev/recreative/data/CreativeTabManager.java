@@ -1,12 +1,15 @@
 package com.evandev.recreative.data;
 
 import com.evandev.recreative.Constants;
+import com.evandev.recreative.mixin.accessor.MappedRegistryAccessor;
 import com.evandev.recreative.platform.Services;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -32,7 +35,7 @@ public class CreativeTabManager {
     public static final Map<String, TabModifier> TAB_MODIFIERS = new HashMap<>();
     public static final Map<String, TabModifier> CUSTOM_TABS_DEFS = new HashMap<>();
     private static final Gson GSON = new GsonBuilder()
-            .setLenient()
+            .setStrictness(Strictness.LENIENT)
             .registerTypeAdapter(ItemEntry.class, new ItemEntryDeserializer())
             .registerTypeAdapter(new TypeToken<List<String>>() {
             }.getType(), new StringOrListDeserializer())
@@ -67,49 +70,81 @@ public class CreativeTabManager {
         }
 
         CUSTOM_TABS_DEFS.forEach((id, def) -> {
-            CreativeModeTab tab = Services.PLATFORM.buildCreativeTab(
-                    Component.translatable(def.name),
-                    () -> {
-                        Item iconItem = BuiltInRegistries.ITEM.getValue(Identifier.parse(def.icon));
-                        return new ItemStack(iconItem);
-                    },
-                    (parameters, output) -> {
-                        for (ItemEntry entry : def.addItems) {
-                            if (entry == null || entry.item == null) continue;
+            Identifier tabId = Identifier.parse(id);
+            CreativeModeTab existingTab = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(tabId);
 
-                            List<ItemStack> stacksToAdd = new ArrayList<>();
+            CreativeModeTab tabToUse;
 
-                            if (entry.item.startsWith("#")) {
-                                TagKey<Item> tagKey = TagKey.create(Registries.ITEM, Identifier.parse(entry.item.substring(1)));
-                                for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
-                                    stacksToAdd.add(new ItemStack(holder.value()));
-                                }
-                            } else {
-                                Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(entry.item));
-                                stacksToAdd.add(new ItemStack(item));
-                            }
+            if (existingTab != null) {
+                tabToUse = existingTab;
+            } else {
+                tabToUse = Services.PLATFORM.buildCreativeTab(
+                        Component.translatable(def.name),
+                        () -> {
+                            TabModifier currentDef = CUSTOM_TABS_DEFS.get(id);
+                            String iconId = (currentDef != null && currentDef.icon != null) ? currentDef.icon : "minecraft:stone";
+                            Item iconItem = BuiltInRegistries.ITEM.getValue(Identifier.parse(iconId));
+                            return new ItemStack(iconItem);
+                        },
+                        (parameters, output) -> {
+                            TabModifier currentDef = CUSTOM_TABS_DEFS.get(id);
+                            if (currentDef == null) return;
 
-                            for (ItemStack stack : stacksToAdd) {
-                                if (stack.isEmpty() || stack.getCount() != 1) continue;
+                            for (ItemEntry entry : currentDef.addItems) {
+                                if (entry == null || entry.item == null) continue;
 
-                                if (entry.components != null) {
-                                    try {
-                                        JsonElement componentJson = JsonParser.parseString(entry.components);
-                                        DataComponentPatch patch = DataComponentPatch.CODEC.parse(
-                                                RegistryOps.create(JsonOps.INSTANCE, parameters.holders()),
-                                                componentJson
-                                        ).result().orElseThrow();
-                                        stack.applyComponents(patch);
-                                    } catch (Exception e) {
-                                        Constants.LOG.error("Failed to parse components for item {}", entry.item, e);
+                                List<ItemStack> stacksToAdd = new ArrayList<>();
+
+                                if (entry.item.startsWith("#")) {
+                                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, Identifier.parse(entry.item.substring(1)));
+                                    for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
+                                        stacksToAdd.add(new ItemStack(holder.value()));
                                     }
+                                } else {
+                                    Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(entry.item));
+                                    stacksToAdd.add(new ItemStack(item));
                                 }
-                                output.accept(stack);
+
+                                for (ItemStack stack : stacksToAdd) {
+                                    if (stack.isEmpty() || stack.getCount() != 1) continue;
+
+                                    if (entry.components != null) {
+                                        try {
+                                            JsonElement componentJson = JsonParser.parseString(entry.components);
+                                            DataComponentPatch patch = DataComponentPatch.CODEC.parse(
+                                                    RegistryOps.create(JsonOps.INSTANCE, parameters.holders()),
+                                                    componentJson
+                                            ).result().orElseThrow();
+                                            stack.applyComponents(patch);
+                                        } catch (Exception e) {
+                                            Constants.LOG.error("Failed to parse components for item {}", entry.item, e);
+                                        }
+                                    }
+                                    output.accept(stack);
+                                }
                             }
                         }
+                );
+
+                boolean wasFrozen = false;
+                MappedRegistryAccessor registryAccessor = null;
+
+                if (BuiltInRegistries.CREATIVE_MODE_TAB instanceof MappedRegistryAccessor accessor) {
+                    registryAccessor = accessor;
+                    wasFrozen = registryAccessor.isFrozen();
+                    if (wasFrozen) {
+                        registryAccessor.setFrozen(false);
                     }
-            );
-            RUNTIME_TABS.put(id, tab);
+                }
+
+                Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, tabId, tabToUse);
+
+                if (wasFrozen) {
+                    registryAccessor.setFrozen(true);
+                }
+            }
+
+            RUNTIME_TABS.put(id, tabToUse);
         });
 
         Constants.LOG.info("Loaded Recreative tabs configuration!");
@@ -118,9 +153,9 @@ public class CreativeTabManager {
     private static void parseFile(Path path) {
         try (FileReader fileReader = new FileReader(path.toFile())) {
             JsonReader reader = new JsonReader(fileReader);
-            reader.setLenient(true);
+            reader.setStrictness(Strictness.LENIENT);
 
-            while (reader.peek() != com.google.gson.stream.JsonToken.END_DOCUMENT) {
+            while (reader.peek() != JsonToken.END_DOCUMENT) {
                 JsonElement json = JsonParser.parseReader(reader);
                 if (json.isJsonArray()) {
                     for (JsonElement e : json.getAsJsonArray()) {
@@ -143,7 +178,7 @@ public class CreativeTabManager {
             case TAB_ORDER -> TAB_ORDER.addAll(rule.order);
             case MODIFY_TAB -> {
                 for (String tabId : rule.tabs) {
-                    TabModifier modifyDef = TAB_MODIFIERS.computeIfAbsent(tabId, k -> new TabModifier());
+                    TabModifier modifyDef = TAB_MODIFIERS.computeIfAbsent(tabId, _ -> new TabModifier());
                     if (rule.name != null) modifyDef.name = rule.name;
                     if (rule.icon != null) modifyDef.icon = rule.icon;
                     if (rule.removeItems != null) modifyDef.removeItems.addAll(rule.removeItems);

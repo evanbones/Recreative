@@ -14,8 +14,8 @@ import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
@@ -66,6 +66,8 @@ public abstract class CreativeModeTabMixin {
         }
 
         CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
+        if (modifier == null) modifier = CreativeTabManager.CUSTOM_TABS_DEFS.get(id);
+
         if (modifier != null && modifier.name != null && !modifier.name.isEmpty()) {
             cir.setReturnValue(Component.translatable(modifier.name));
         }
@@ -77,6 +79,8 @@ public abstract class CreativeModeTabMixin {
 
         String id = recreative$getTabId();
         CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
+        if (modifier == null) modifier = CreativeTabManager.CUSTOM_TABS_DEFS.get(id);
+
         if (modifier != null && modifier.icon != null && !modifier.icon.isEmpty()) {
             Item customIcon = BuiltInRegistries.ITEM.getValue(Identifier.parse(modifier.icon));
             cir.setReturnValue(new ItemStack(customIcon));

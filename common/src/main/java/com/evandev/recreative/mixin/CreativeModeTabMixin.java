@@ -1,6 +1,7 @@
 package com.evandev.recreative.mixin;
 
 import com.evandev.recreative.Constants;
+import com.evandev.recreative.api.ICustomIconTab;
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
@@ -82,8 +83,14 @@ public abstract class CreativeModeTabMixin {
         if (modifier == null) modifier = CreativeTabManager.CUSTOM_TABS_DEFS.get(id);
 
         if (modifier != null && modifier.icon != null && !modifier.icon.isEmpty()) {
-            Item customIcon = BuiltInRegistries.ITEM.get(ResourceLocation.parse(modifier.icon));
-            cir.setReturnValue(new ItemStack(customIcon));
+            if (modifier.icon.endsWith(".png")) {
+                ((ICustomIconTab) this).recreative$setCustomIcon(ResourceLocation.parse(modifier.icon));
+                cir.setReturnValue(ItemStack.EMPTY);
+            } else {
+                Item customIcon = BuiltInRegistries.ITEM.get(ResourceLocation.parse(modifier.icon));
+                cir.setReturnValue(new ItemStack(customIcon));
+                ((ICustomIconTab) this).recreative$setCustomIcon(null);
+            }
         }
     }
 

@@ -1,11 +1,13 @@
 package com.evandev.recreative.data;
 
 import com.evandev.recreative.Constants;
+import com.evandev.recreative.api.ICustomIconTab;
 import com.evandev.recreative.mixin.accessor.MappedRegistryAccessor;
 import com.evandev.recreative.platform.Services;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.*;
 import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -80,6 +82,11 @@ public class CreativeTabManager {
                         () -> {
                             TabModifier currentDef = CUSTOM_TABS_DEFS.get(id);
                             String iconId = (currentDef != null && currentDef.icon != null) ? currentDef.icon : "minecraft:stone";
+
+                            if (iconId.endsWith(".png")) {
+                                return ItemStack.EMPTY;
+                            }
+
                             Item iconItem = BuiltInRegistries.ITEM.get(new ResourceLocation(iconId));
                             return new ItemStack(iconItem);
                         },
@@ -136,7 +143,9 @@ public class CreativeTabManager {
                     registryAccessor.setFrozen(true);
                 }
             }
-
+            if (def != null && def.icon != null && def.icon.endsWith(".png")) {
+                ((ICustomIconTab) tabToUse).recreative$setCustomIcon(new ResourceLocation(def.icon));
+            }
             RUNTIME_TABS.put(id, tabToUse);
         });
 
@@ -148,7 +157,7 @@ public class CreativeTabManager {
             JsonReader reader = new JsonReader(fileReader);
             reader.setLenient(true);
 
-            while (reader.peek() != com.google.gson.stream.JsonToken.END_DOCUMENT) {
+            while (reader.peek() != JsonToken.END_DOCUMENT) {
                 JsonElement json = JsonParser.parseReader(reader);
                 if (json.isJsonArray()) {
                     for (JsonElement e : json.getAsJsonArray()) {

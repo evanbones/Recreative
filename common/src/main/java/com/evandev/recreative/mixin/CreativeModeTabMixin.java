@@ -1,9 +1,11 @@
 package com.evandev.recreative.mixin;
 
 import com.evandev.recreative.Constants;
+import com.evandev.recreative.api.ICustomIconTab;
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
+import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -81,8 +83,14 @@ public abstract class CreativeModeTabMixin {
         if (modifier == null) modifier = CreativeTabManager.CUSTOM_TABS_DEFS.get(id);
 
         if (modifier != null && modifier.icon != null && !modifier.icon.isEmpty()) {
-            Item customIcon = BuiltInRegistries.ITEM.get(new ResourceLocation(modifier.icon));
-            cir.setReturnValue(new ItemStack(customIcon));
+            if (modifier.icon.endsWith(".png")) {
+                ((ICustomIconTab) this).recreative$setCustomIcon(new ResourceLocation(modifier.icon));
+                cir.setReturnValue(ItemStack.EMPTY);
+            } else {
+                Item customIcon = BuiltInRegistries.ITEM.get(new ResourceLocation(modifier.icon));
+                cir.setReturnValue(new ItemStack(customIcon));
+                ((ICustomIconTab) this).recreative$setCustomIcon(null);
+            }
         }
     }
 
@@ -187,5 +195,35 @@ public abstract class CreativeModeTabMixin {
 
         this.displayItemsSearchTab.clear();
         this.displayItemsSearchTab.addAll(tempSearchItems);
+    }
+
+    @Inject(method = "buildContents", at = @At("HEAD"), cancellable = true)
+    private void recreative$bypassRegistryCheck(CreativeModeTab.ItemDisplayParameters parameters, CallbackInfo ci) {
+        CreativeModeTab self = (CreativeModeTab) (Object) this;
+
+        if (CreativeTabManager.RUNTIME_TABS.containsValue(self)) {
+            Collection<ItemStack> displayItems = self.getDisplayItems();
+            Collection<ItemStack> searchItems = self.getSearchTabDisplayItems();
+
+            displayItems.clear();
+            searchItems.clear();
+
+            CreativeModeTab.Output output = (stack, visibility) -> {
+                if (stack.getCount() != 1) return;
+
+                if (stack.getItem().isEnabled(parameters.enabledFeatures())) {
+                    if (visibility != CreativeModeTab.TabVisibility.SEARCH_TAB_ONLY) {
+                        displayItems.add(stack);
+                    }
+                    if (visibility != CreativeModeTab.TabVisibility.PARENT_TAB_ONLY) {
+                        searchItems.add(stack);
+                    }
+                }
+            };
+
+            ((CreativeModeTabAccessor) self).getDisplayItemsGenerator().accept(parameters, output);
+
+            ci.cancel();
+        }
     }
 }

@@ -1,3 +1,8 @@
+### Added
+
+- Added support for raw `ResourceLocation`/`Identifier`s in tab icons.
+    - For example: `"icon": "minecraft:textures/item/apple.png"`
+
 ### Fixed
 
-- Switched to a safer dynamic tab registration system, fixing a crash with Supplementaries.
+- Fixed Fabric crash on 26.1.

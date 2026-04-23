@@ -4,6 +4,7 @@
   "package": "com.evandev.recreative.mixin",
   "compatibilityLevel": "JAVA_18",
   "mixins": [
+    "CreativeModeTabIconMixin",
     "CreativeModeTabMixin",
     "CreativeModeTabsMixin",
     "accessor.CreativeModeTabAccessor",
@@ -11,6 +12,8 @@
     "accessor.MappedRegistryAccessor"
   ],
   "client": [
+    "CreativeModeInventoryScreenMixin",
+    "accessor.AbstractContainerScreenAccessor"
   ],
   "server": [],
   "injectors": {

@@ -1,6 +1,7 @@
 package com.evandev.recreative.data;
 
 import com.evandev.recreative.Constants;
+import com.evandev.recreative.api.ICustomIconTab;
 import com.evandev.recreative.mixin.accessor.MappedRegistryAccessor;
 import com.evandev.recreative.platform.Services;
 import com.google.common.reflect.TypeToken;
@@ -83,6 +84,11 @@ public class CreativeTabManager {
                         () -> {
                             TabModifier currentDef = CUSTOM_TABS_DEFS.get(id);
                             String iconId = (currentDef != null && currentDef.icon != null) ? currentDef.icon : "minecraft:stone";
+
+                            if (iconId.endsWith(".png")) {
+                                return ItemStack.EMPTY;
+                            }
+
                             Item iconItem = BuiltInRegistries.ITEM.getValue(Identifier.parse(iconId));
                             return new ItemStack(iconItem);
                         },
@@ -143,7 +149,9 @@ public class CreativeTabManager {
                     registryAccessor.setFrozen(true);
                 }
             }
-
+            if (def != null && def.icon != null && def.icon.endsWith(".png")) {
+                ((ICustomIconTab) tabToUse).recreative$setCustomIcon(Identifier.parse(def.icon));
+            }
             RUNTIME_TABS.put(id, tabToUse);
         });
 

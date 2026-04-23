@@ -55,10 +55,15 @@ public class CreativeModeTabsMixin {
         List<String> order = CreativeTabManager.TAB_ORDER;
         Set<String> removed = CreativeTabManager.REMOVED_TABS;
 
+        int hiddenSlot = 1000;
+
         for (CreativeModeTab tab : original) {
             String id = CreativeTabManager.getTabId(tab);
             if (!removed.contains(id)) {
                 filtered.add(tab);
+            } else {
+                ((CreativeModeTabAccessor) tab).setRow(CreativeModeTab.Row.TOP);
+                ((CreativeModeTabAccessor) tab).setColumn(hiddenSlot++);
             }
         }
 

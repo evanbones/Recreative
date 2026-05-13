@@ -57,13 +57,18 @@ public class CreativeModeTabsMixin {
 
         int hiddenSlot = 1000;
 
+        for (CreativeModeTab tab : CreativeModeTabs.allTabs()) {
+            String id = CreativeTabManager.getTabId(tab);
+            if (removed.contains(id)) {
+                ((CreativeModeTabAccessor) tab).setRow(CreativeModeTab.Row.TOP);
+                ((CreativeModeTabAccessor) tab).setColumn(hiddenSlot++);
+            }
+        }
+
         for (CreativeModeTab tab : original) {
             String id = CreativeTabManager.getTabId(tab);
             if (!removed.contains(id)) {
                 filtered.add(tab);
-            } else {
-                ((CreativeModeTabAccessor) tab).setRow(CreativeModeTab.Row.TOP);
-                ((CreativeModeTabAccessor) tab).setColumn(hiddenSlot++);
             }
         }
 

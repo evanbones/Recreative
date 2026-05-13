@@ -99,82 +99,88 @@ public class RecreativeCommand {
         );
     }
 
-    private static int executeDumpTemplates(CommandContext<CommandSourceStack> context) {
+    private static void dumpTemplates(CommandContext<CommandSourceStack> context) throws Exception {
         CommandSourceStack source = context.getSource();
-        try {
-            CreativeModeTab.ItemDisplayParameters dumpParams = new CreativeModeTab.ItemDisplayParameters(
-                    source.enabledFeatures(),
-                    source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER),
-                    source.registryAccess()
-            );
+        CreativeModeTab.ItemDisplayParameters dumpParams = new CreativeModeTab.ItemDisplayParameters(
+                source.enabledFeatures(),
+                source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER),
+                source.registryAccess()
+        );
 
-            Path baseDir = Services.PLATFORM.getConfigDirectory().resolve("recreative").resolve("tabs");
-            Set<String> specialTabs = Set.of("minecraft:search", "minecraft:inventory", "minecraft:hotbar", "minecraft:op_blocks");
+        Path baseDir = Services.PLATFORM.getConfigDirectory().resolve("recreative_exports").resolve("templates");
+        Set<String> specialTabs = Set.of("minecraft:search", "minecraft:inventory", "minecraft:hotbar", "minecraft:op_blocks");
 
-            for (Identifier id : BuiltInRegistries.CREATIVE_MODE_TAB.keySet()) {
-                if (specialTabs.contains(id.toString())) continue;
+        for (Identifier id : BuiltInRegistries.CREATIVE_MODE_TAB.keySet()) {
+            if (specialTabs.contains(id.toString())) continue;
 
-                CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(id);
-                if (tab == null) continue;
+            CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(id);
+            if (tab == null) continue;
 
-                TabRule rule = new TabRule();
-                rule.action = Action.MODIFY_TAB;
-                rule.tabs.add(id.toString());
+            TabRule rule = new TabRule();
+            rule.action = Action.MODIFY_TAB;
+            rule.tabs.add(id.toString());
 
-                ItemStack iconStack = tab.getIconItem();
-                if (!iconStack.isEmpty()) {
-                    Identifier iconId = BuiltInRegistries.ITEM.getKey(iconStack.getItem());
-                    if (!iconId.toString().equals("minecraft:air")) {
-                        rule.icon = iconId.toString();
-                    }
-                }
-
-                List<ItemStack> serverItems = new ArrayList<>();
-                try {
-                    ((CreativeModeTabAccessor) tab).getDisplayItemsGenerator().accept(dumpParams, (stack, visibility) -> {
-                        if (visibility != CreativeModeTab.TabVisibility.SEARCH_TAB_ONLY) {
-                            serverItems.add(stack);
-                        }
-                    });
-                } catch (Throwable t) {
-                    Constants.LOG.error("Failed to safely generate items for tab {}", id, t);
-                }
-
-                for (ItemStack stack : serverItems) {
-                    if (stack.isEmpty() || stack.getCount() != 1) continue;
-                    Identifier itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
-
-                    if (!itemId.toString().equals("minecraft:air")) {
-                        ItemEntry entry = new ItemEntry(itemId.toString());
-                        DataComponentPatch patch = stack.getComponentsPatch();
-
-                        if (!patch.isEmpty()) {
-                            try {
-                                JsonElement componentJson = DataComponentPatch.CODEC.encodeStart(
-                                        RegistryOps.create(JsonOps.INSTANCE, dumpParams.holders()),
-                                        patch
-                                ).getOrThrow(IllegalStateException::new);
-                                entry.components = componentJson.toString();
-                            } catch (Exception e) {
-                                Constants.LOG.error("Failed to serialize components for item {}", itemId, e);
-                            }
-                        }
-                        rule.addItems.add(entry);
-                    }
-                }
-
-                File modDir = baseDir.resolve(id.getNamespace()).toFile();
-                if (!modDir.exists() && !modDir.mkdirs()) {
-                    continue;
-                }
-
-                File file = new File(modDir, id.getPath() + ".json");
-                try (FileWriter writer = new FileWriter(file)) {
-                    GSON.toJson(List.of(rule), writer);
+            ItemStack iconStack = tab.getIconItem();
+            if (!iconStack.isEmpty()) {
+                Identifier iconId = BuiltInRegistries.ITEM.getKey(iconStack.getItem());
+                if (!iconId.toString().equals("minecraft:air")) {
+                    rule.icon = iconId.toString();
                 }
             }
 
-            Component link = Component.literal("recreative/tabs/")
+            List<ItemStack> serverItems = new ArrayList<>();
+            try {
+                ((CreativeModeTabAccessor) tab).getDisplayItemsGenerator().accept(dumpParams, (stack, visibility) -> {
+                    if (visibility != CreativeModeTab.TabVisibility.SEARCH_TAB_ONLY) {
+                        serverItems.add(stack);
+                    }
+                });
+            } catch (Throwable t) {
+                Constants.LOG.error("Failed to safely generate items for tab {}", id, t);
+            }
+
+            for (ItemStack stack : serverItems) {
+                if (stack.isEmpty() || stack.getCount() != 1) continue;
+                Identifier itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+
+                if (!itemId.toString().equals("minecraft:air")) {
+                    ItemEntry entry = new ItemEntry(itemId.toString());
+                    DataComponentPatch patch = stack.getComponentsPatch();
+
+                    if (!patch.isEmpty()) {
+                        try {
+                            JsonElement componentJson = DataComponentPatch.CODEC.encodeStart(
+                                    RegistryOps.create(JsonOps.INSTANCE, dumpParams.holders()),
+                                    patch
+                            ).getOrThrow(IllegalStateException::new);
+                            entry.components = componentJson.toString();
+                        } catch (Exception e) {
+                            Constants.LOG.error("Failed to serialize components for item {}", itemId, e);
+                        }
+                    }
+                    rule.addItems.add(entry);
+                }
+            }
+
+            File modDir = baseDir.resolve(id.getNamespace()).toFile();
+            if (!modDir.exists() && !modDir.mkdirs()) {
+                continue;
+            }
+
+            File file = new File(modDir, id.getPath() + ".json");
+            try (FileWriter writer = new FileWriter(file)) {
+                GSON.toJson(List.of(rule), writer);
+            }
+        }
+    }
+
+    private static int executeDumpTemplates(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        try {
+            dumpTemplates(context);
+
+            Path baseDir = Services.PLATFORM.getConfigDirectory().resolve("recreative_exports").resolve("templates");
+            Component link = Component.literal("recreative_exports/templates/")
                     .withStyle(Style.EMPTY
                             .withColor(ChatFormatting.GREEN)
                             .withUnderlined(true)
@@ -198,6 +204,7 @@ public class RecreativeCommand {
                 dumpData("tabs", getTabs());
                 dumpData("items", getItems());
                 dumpData("blocks", getBlocks());
+                dumpTemplates(context);
                 sendSuccessMessage(source, "all");
             } else {
                 List<String> data = switch (type) {

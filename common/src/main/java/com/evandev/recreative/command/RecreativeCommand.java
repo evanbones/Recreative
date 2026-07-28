@@ -16,6 +16,8 @@ import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.ClickEvent;
@@ -23,6 +25,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.ItemStack;
@@ -32,8 +35,10 @@ import java.io.FileWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class RecreativeCommand {
     private static final Gson GSON = new GsonBuilder()
@@ -59,6 +64,20 @@ public class RecreativeCommand {
             })
             .create();
 
+    private static HolderLookup.Provider recreative$freshHolders(HolderLookup.Provider delegate) {
+        return new HolderLookup.Provider() {
+            @Override
+            public Stream<ResourceKey<? extends Registry<?>>> listRegistries() {
+                return delegate.listRegistries();
+            }
+
+            @Override
+            public <T> Optional<HolderLookup.RegistryLookup<T>> lookup(ResourceKey<? extends Registry<? extends T>> registryKey) {
+                return delegate.lookup(registryKey);
+            }
+        };
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("recreative")
                 .requires(source -> source.hasPermission(2))
@@ -67,8 +86,11 @@ public class RecreativeCommand {
                             ModConfig.load();
                             CreativeTabManager.load();
 
-                            CreativeModeTab.ItemDisplayParameters params = CreativeModeTabsAccessor.getCachedParameters();
-                            if (params != null) {
+                            CreativeModeTab.ItemDisplayParameters cachedParams = CreativeModeTabsAccessor.getCachedParameters();
+                            if (cachedParams != null) {
+                                CreativeModeTab.ItemDisplayParameters params = new CreativeModeTab.ItemDisplayParameters(
+                                        cachedParams.enabledFeatures(), cachedParams.hasPermissions(), recreative$freshHolders(cachedParams.holders()));
+
                                 for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
                                     try {
                                         tab.buildContents(params);

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Template jsons are no longer automatically loaded after being dumped.
+- Template JSONs are no longer automatically loaded after being dumped.
 - `/recreative dump all` now includes templates in the dump.
 
 ### Fixed

@@ -8,6 +8,8 @@ import com.evandev.recreative.data.ItemEntry;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponentPatch;
@@ -21,6 +23,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -94,6 +97,65 @@ public abstract class CreativeModeTabMixin {
         }
     }
 
+    @WrapOperation(method = "buildContents", at = @At(value = "FIELD", target = "Lnet/minecraft/world/item/CreativeModeTab;displayItemsGenerator:Lnet/minecraft/world/item/CreativeModeTab$DisplayItemsGenerator;", opcode = Opcodes.GETFIELD))
+    private CreativeModeTab.DisplayItemsGenerator recreative$wrapDisplayItemsGenerator(CreativeModeTab instance, Operation<CreativeModeTab.DisplayItemsGenerator> original) {
+        CreativeModeTab.DisplayItemsGenerator originalGenerator = original.call(instance);
+        if (!ModConfig.get().enabled) return originalGenerator;
+
+        String id = recreative$getTabId();
+        CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
+        if (modifier == null || modifier.addItems.isEmpty()) return originalGenerator;
+
+        return (parameters, output) -> {
+            originalGenerator.accept(parameters, output);
+            for (ItemEntry entry : modifier.addItems) {
+                for (ItemStack stack : recreative$resolveStacksToAdd(entry, parameters)) {
+                    try {
+                        output.accept(stack, CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS);
+                    } catch (IllegalStateException ignored) {
+                    }
+                }
+            }
+        };
+    }
+
+    @Unique
+    private List<ItemStack> recreative$resolveStacksToAdd(ItemEntry entry, CreativeModeTab.ItemDisplayParameters parameters) {
+        List<ItemStack> stacksToAdd = new ArrayList<>();
+        if (entry == null || entry.item == null) return stacksToAdd;
+
+        if (entry.item.startsWith("#")) {
+            TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(entry.item.substring(1)));
+            for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
+                stacksToAdd.add(new ItemStack(holder.value()));
+            }
+        } else {
+            Item itemToAdd = BuiltInRegistries.ITEM.get(ResourceLocation.parse(entry.item));
+            stacksToAdd.add(new ItemStack(itemToAdd));
+        }
+
+        List<ItemStack> result = new ArrayList<>();
+        for (ItemStack stack : stacksToAdd) {
+            if (stack.isEmpty() || stack.getCount() != 1) continue;
+
+            if (entry.components != null) {
+                try {
+                    JsonElement componentJson = JsonParser.parseString(entry.components);
+                    DataComponentPatch patch = DataComponentPatch.CODEC.parse(
+                            RegistryOps.create(JsonOps.INSTANCE, parameters.holders()),
+                            componentJson
+                    ).result().orElseThrow();
+                    stack.applyComponents(patch);
+                } catch (Exception e) {
+                    Constants.LOG.error("Failed to parse components for item {}", entry.item, e);
+                }
+            }
+
+            result.add(stack);
+        }
+        return result;
+    }
+
     @Inject(method = "buildContents", at = @At("TAIL"))
     private void postBuildContents(CreativeModeTab.ItemDisplayParameters parameters, CallbackInfo ci) {
         if (!ModConfig.get().enabled) return;
@@ -163,53 +225,41 @@ public abstract class CreativeModeTabMixin {
         if (!modifier.addItems.isEmpty()) {
             for (ItemEntry entry : modifier.addItems) {
                 if (entry == null || entry.item == null) continue;
+                if (entry.after == null && entry.before == null) continue;
 
-                List<ItemStack> stacksToAdd = new ArrayList<>();
-
-                if (entry.item.startsWith("#")) {
-                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(entry.item.substring(1)));
-                    for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
-                        stacksToAdd.add(new ItemStack(holder.value()));
-                    }
-                } else {
-                    Item itemToAdd = BuiltInRegistries.ITEM.get(ResourceLocation.parse(entry.item));
-                    stacksToAdd.add(new ItemStack(itemToAdd));
-                }
-
-                for (ItemStack stack : stacksToAdd) {
-                    if (stack.isEmpty() || stack.getCount() != 1) continue;
-
-                    if (entry.components != null) {
-                        try {
-                            JsonElement componentJson = JsonParser.parseString(entry.components);
-                            DataComponentPatch patch = DataComponentPatch.CODEC.parse(
-                                    RegistryOps.create(JsonOps.INSTANCE, parameters.holders()),
-                                    componentJson
-                            ).result().orElseThrow();
-                            stack.applyComponents(patch);
-                        } catch (Exception e) {
-                            Constants.LOG.error("Failed to parse components for item {}", entry.item, e);
+                for (ItemStack resolved : recreative$resolveStacksToAdd(entry, parameters)) {
+                    Item item = resolved.getItem();
+                    int currentIndex = -1;
+                    for (int i = 0; i < tempDisplayItems.size(); i++) {
+                        if (tempDisplayItems.get(i).getItem() == item) {
+                            currentIndex = i;
+                            break;
                         }
                     }
+                    if (currentIndex < 0) continue;
 
-                    int insertIndex = tempDisplayItems.size();
+                    int targetIndex = tempDisplayItems.size();
                     if (entry.after != null) {
                         for (int i = 0; i < tempDisplayItems.size(); i++) {
+                            if (i == currentIndex) continue;
                             if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.after)) {
-                                insertIndex = i + 1;
+                                targetIndex = i + 1;
                             }
                         }
-                    } else if (entry.before != null) {
+                    } else {
                         for (int i = 0; i < tempDisplayItems.size(); i++) {
+                            if (i == currentIndex) continue;
                             if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.before)) {
-                                insertIndex = i;
+                                targetIndex = i;
                                 break;
                             }
                         }
                     }
 
-                    tempDisplayItems.add(insertIndex, stack.copy());
-                    tempSearchItems.add(stack.copy());
+                    if (targetIndex == currentIndex) continue;
+                    ItemStack stack = tempDisplayItems.remove(currentIndex);
+                    if (targetIndex > currentIndex) targetIndex--;
+                    tempDisplayItems.add(targetIndex, stack);
                 }
             }
         }

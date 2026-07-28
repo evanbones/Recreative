@@ -109,10 +109,12 @@ public abstract class CreativeModeTabMixin {
         return (parameters, output) -> {
             originalGenerator.accept(parameters, output);
             for (ItemEntry entry : modifier.addItems) {
+                if (entry.after != null || entry.before != null) continue;
+
                 for (ItemStack stack : recreative$resolveStacksToAdd(entry, parameters)) {
                     try {
                         output.accept(stack, CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS);
-                    } catch (IllegalStateException ignored) {
+                    } catch (IllegalStateException | IllegalArgumentException ignored) {
                     }
                 }
             }
@@ -236,7 +238,6 @@ public abstract class CreativeModeTabMixin {
                             break;
                         }
                     }
-                    if (currentIndex < 0) continue;
 
                     int targetIndex = tempDisplayItems.size();
                     if (entry.after != null) {
@@ -254,6 +255,13 @@ public abstract class CreativeModeTabMixin {
                                 break;
                             }
                         }
+                    }
+
+                    if (currentIndex < 0) {
+                        if (targetIndex > tempDisplayItems.size()) targetIndex = tempDisplayItems.size();
+                        tempDisplayItems.add(targetIndex, resolved);
+                        if (!tempSearchItems.contains(resolved)) tempSearchItems.add(resolved);
+                        continue;
                     }
 
                     if (targetIndex == currentIndex) continue;

@@ -1,3 +1,3 @@
 ### Fixed
 
-- Fixed issues with Clutter No More.
+- Fixed crash when removing then adding the same item.

@@ -51,7 +51,7 @@ Recreative provides a couple useful commands to help you manage your configurati
 
 ## In-Game Settings
 
-General config options can be accessed in-game (when **[Cloth Config](https://modrinth.com/mod/cloth-config)** is installed). This includes toggling the mod on/off globally, and a debug option to show internal tab IDs, which replaces all tab names with their registry ID to help you write your config files faster.
+General config options can be accessed in-game (when **[YACL](https://modrinth.com/mod/yacl)** is installed). This includes toggling the mod on/off globally, and a debug option to show internal tab IDs, which replaces all tab names with their registry ID to help you write your config files faster.
 
 ## License
 

@@ -136,7 +136,7 @@ public class RecreativeCommand {
                     }
                 });
             } catch (Throwable t) {
-                Constants.LOG.error("Failed to safely generate items for tab {}", id, t);
+                Constants.LOG.error("Failed to generate items for tab {}", id, t);
             }
 
             for (ItemStack stack : serverItems) {

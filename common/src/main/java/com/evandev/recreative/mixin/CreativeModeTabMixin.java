@@ -230,10 +230,9 @@ public abstract class CreativeModeTabMixin {
                 if (entry.after == null && entry.before == null) continue;
 
                 for (ItemStack resolved : recreative$resolveStacksToAdd(entry, parameters)) {
-                    Item item = resolved.getItem();
                     int currentIndex = -1;
                     for (int i = 0; i < tempDisplayItems.size(); i++) {
-                        if (tempDisplayItems.get(i).getItem() == item) {
+                        if (ItemStack.isSameItemSameComponents(tempDisplayItems.get(i), resolved)) {
                             currentIndex = i;
                             break;
                         }

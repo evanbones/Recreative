@@ -1,3 +1,3 @@
 ### Fixed
 
-- Fixed crash when removing then adding the same item.
+- Fixed issues with adding multiple items with components to the same tab.

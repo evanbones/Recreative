@@ -1,9 +1,13 @@
 package com.evandev.recreative.mixin;
 
 import com.evandev.recreative.api.ICustomIconTab;
+import com.evandev.recreative.client.gui.button.CreativeScreenEditorButton;
+import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.mixin.accessor.AbstractContainerScreenAccessor;
+import com.evandev.recreative.mixin.accessor.ScreenAccessor;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,6 +21,19 @@ public abstract class CreativeModeInventoryScreenMixin {
 
     @Shadow
     protected abstract int getTabX(CreativeModeTab tab);
+
+    @Inject(method = "init", at = @At("RETURN"))
+    private void recreative$addEditorButton(CallbackInfo ci) {
+        if (!ModConfig.get().showEditorButton) return;
+
+        AbstractContainerScreenAccessor accessor = (AbstractContainerScreenAccessor) this;
+        ScreenAccessor screenAccessor = (ScreenAccessor) this;
+        screenAccessor.recreative$invokeAddRenderableWidget(new CreativeScreenEditorButton(
+                () -> accessor.getLeftPos() + accessor.getImageWidth() + 4,
+                () -> accessor.getTopPos() + 6,
+                Component.literal("Edit")
+        ));
+    }
 
     @Inject(method = "renderTabButton", at = @At("TAIL"))
     private void recreative$renderCustomTabIcon(GuiGraphics guiGraphics, CreativeModeTab creativeModeTab, CallbackInfo ci) {

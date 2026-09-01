@@ -2,6 +2,8 @@ package com.evandev.recreative.data;
 
 import com.evandev.recreative.Constants;
 import com.evandev.recreative.api.ICustomIconTab;
+import com.evandev.recreative.config.ModConfig;
+import com.evandev.recreative.mixin.accessor.CreativeModeTabsAccessor;
 import com.evandev.recreative.mixin.accessor.MappedRegistryAccessor;
 import com.evandev.recreative.platform.Services;
 import com.google.common.reflect.TypeToken;
@@ -10,12 +12,14 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
@@ -156,6 +160,58 @@ public class CreativeTabManager {
         });
 
         Constants.LOG.info("Loaded Recreative tabs configuration!");
+    }
+
+    public static void reloadTabs() {
+        ModConfig.load();
+        CreativeTabManager.load();
+
+        for (ResourceLocation key : BuiltInRegistries.CREATIVE_MODE_TAB.keySet()) {
+            CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.get(key);
+            if (tab != null) {
+                String id = key.toString();
+                TabModifier mod = TAB_MODIFIERS.get(id);
+                if (mod != null && mod.icon != null && mod.icon.endsWith(".png")) {
+                    ((ICustomIconTab) tab).recreative$setCustomIcon(ResourceLocation.parse(mod.icon));
+                } else {
+                    ((ICustomIconTab) tab).recreative$setCustomIcon(null);
+                }
+            }
+        }
+
+        CreativeModeTab.ItemDisplayParameters cachedParams = CreativeModeTabsAccessor.getCachedParameters();
+        if (cachedParams != null) {
+            CreativeModeTab.ItemDisplayParameters params = new CreativeModeTab.ItemDisplayParameters(
+                    cachedParams.enabledFeatures(), cachedParams.hasPermissions(), freshHolders(cachedParams.holders()));
+
+            for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
+                try {
+                    tab.buildContents(params);
+                } catch (Throwable ignored) {
+                }
+            }
+
+            for (CreativeModeTab tab : CreativeTabManager.RUNTIME_TABS.values()) {
+                try {
+                    tab.buildContents(params);
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    public static HolderLookup.Provider freshHolders(HolderLookup.Provider delegate) {
+        return new HolderLookup.Provider() {
+            @Override
+            public Stream<ResourceKey<? extends Registry<?>>> listRegistries() {
+                return delegate.listRegistries();
+            }
+
+            @Override
+            public <T> Optional<HolderLookup.RegistryLookup<T>> lookup(ResourceKey<? extends Registry<? extends T>> registryKey) {
+                return delegate.lookup(registryKey);
+            }
+        };
     }
 
     private static void parseFile(Path path) {

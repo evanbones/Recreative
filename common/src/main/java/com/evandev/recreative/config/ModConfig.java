@@ -22,6 +22,27 @@ public class ModConfig {
     @SerializedName("show_internal_tab_ids")
     public boolean showInternalTabIds = false;
 
+    @SerializedName("show_editor_button")
+    public boolean showEditorButton = true;
+
+    @SerializedName("enable_button_tooltip")
+    public boolean enableButtonTooltip = true;
+
+    @SerializedName("editor_button_offset_x")
+    public int editorButtonOffsetX = 0;
+
+    @SerializedName("editor_button_offset_y")
+    public int editorButtonOffsetY = 0;
+
+    @SerializedName("custom_editor_button_texture")
+    public String customEditorButtonTexture = "";
+
+    @SerializedName("custom_editor_button_texture_hovered")
+    public String customEditorButtonTextureHovered = "";
+
+    @SerializedName("custom_editor_button_icon")
+    public String customEditorButtonIcon = "minecraft:compass";
+
     public static ModConfig get() {
         if (INSTANCE == null) load();
         return INSTANCE;

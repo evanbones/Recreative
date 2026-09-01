@@ -1,3 +1,7 @@
+### Added
+
+- Added an in-game creative tab editor.
+
 ### Fixed
 
-- Fixed issues with adding multiple items with components to the same tab.
+- `/recreative dump templates` now dumps all modded items, not just vanilla ones.

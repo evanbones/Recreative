@@ -1,19 +1,20 @@
 package com.evandev.recreative.command;
 
 import com.evandev.recreative.Constants;
-import com.evandev.recreative.config.ModConfig;
+import com.evandev.recreative.api.ICustomIconTab;
+import com.evandev.recreative.client.gui.CreativeTabEditorScreen;
 import com.evandev.recreative.data.Action;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
 import com.evandev.recreative.data.TabRule;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
-import com.evandev.recreative.mixin.accessor.CreativeModeTabsAccessor;
 import com.evandev.recreative.platform.Services;
 import com.google.gson.*;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.HolderLookup;
@@ -33,10 +34,7 @@ import net.minecraft.world.item.ItemStack;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -83,30 +81,28 @@ public class RecreativeCommand {
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("reload")
                         .executes(context -> {
-                            ModConfig.load();
-                            CreativeTabManager.load();
-
-                            CreativeModeTab.ItemDisplayParameters cachedParams = CreativeModeTabsAccessor.getCachedParameters();
-                            if (cachedParams != null) {
-                                CreativeModeTab.ItemDisplayParameters params = new CreativeModeTab.ItemDisplayParameters(
-                                        cachedParams.enabledFeatures(), cachedParams.hasPermissions(), recreative$freshHolders(cachedParams.holders()));
-
-                                for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
-                                    try {
-                                        tab.buildContents(params);
-                                    } catch (Throwable ignored) {
-                                    }
-                                }
-
-                                for (CreativeModeTab tab : CreativeTabManager.RUNTIME_TABS.values()) {
-                                    try {
-                                        tab.buildContents(params);
-                                    } catch (Throwable ignored) {
-                                    }
-                                }
-                            }
-
+                            CreativeTabManager.reloadTabs();
                             context.getSource().sendSuccess(() -> Component.translatable("command.recreative.reload.success"), true);
+                            return 1;
+                        })
+                )
+                .then(Commands.literal("editor")
+                        .executes(context -> {
+                            if (Services.PLATFORM.isPhysicalClient()) {
+                                Minecraft.getInstance().tell(() -> {
+                                    Minecraft.getInstance().setScreen(new CreativeTabEditorScreen(null));
+                                });
+                            }
+                            return 1;
+                        })
+                )
+                .then(Commands.literal("edit")
+                        .executes(context -> {
+                            if (Services.PLATFORM.isPhysicalClient()) {
+                                Minecraft.getInstance().tell(() -> {
+                                    Minecraft.getInstance().setScreen(new CreativeTabEditorScreen(null));
+                                });
+                            }
                             return 1;
                         })
                 )
@@ -125,17 +121,31 @@ public class RecreativeCommand {
         CreativeModeTab.ItemDisplayParameters dumpParams = new CreativeModeTab.ItemDisplayParameters(
                 source.enabledFeatures(),
                 source.hasPermission(2),
-                source.registryAccess()
+                recreative$freshHolders(source.registryAccess())
         );
 
         Path baseDir = Services.PLATFORM.getConfigDirectory().resolve("recreative_exports").resolve("templates");
         Set<String> specialTabs = Set.of("minecraft:search", "minecraft:inventory", "minecraft:hotbar", "minecraft:op_blocks");
 
+        Map<ResourceLocation, CreativeModeTab> allTabs = new LinkedHashMap<>();
         for (ResourceLocation id : BuiltInRegistries.CREATIVE_MODE_TAB.keySet()) {
-            if (specialTabs.contains(id.toString())) continue;
+            if (!specialTabs.contains(id.toString())) {
+                CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.get(id);
+                if (tab != null) {
+                    allTabs.put(id, tab);
+                }
+            }
+        }
+        for (Map.Entry<String, CreativeModeTab> entry : CreativeTabManager.RUNTIME_TABS.entrySet()) {
+            ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
+            if (id != null && !specialTabs.contains(id.toString()) && !allTabs.containsKey(id)) {
+                allTabs.put(id, entry.getValue());
+            }
+        }
 
-            CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.get(id);
-            if (tab == null) continue;
+        for (Map.Entry<ResourceLocation, CreativeModeTab> tabEntry : allTabs.entrySet()) {
+            ResourceLocation id = tabEntry.getKey();
+            CreativeModeTab tab = tabEntry.getValue();
 
             TabRule rule = new TabRule();
             rule.action = Action.MODIFY_TAB;
@@ -147,17 +157,30 @@ public class RecreativeCommand {
                 if (!iconId.toString().equals("minecraft:air")) {
                     rule.icon = iconId.toString();
                 }
+            } else if (tab instanceof ICustomIconTab customIconTab && customIconTab.recreative$getCustomIcon() != null) {
+                rule.icon = customIconTab.recreative$getCustomIcon().toString();
             }
 
-            List<ItemStack> serverItems = new ArrayList<>();
+            Collection<ItemStack> serverItems = null;
             try {
-                ((CreativeModeTabAccessor) tab).getDisplayItemsGenerator().accept(dumpParams, (stack, visibility) -> {
-                    if (visibility != CreativeModeTab.TabVisibility.SEARCH_TAB_ONLY) {
-                        serverItems.add(stack);
-                    }
-                });
+                tab.buildContents(dumpParams);
+                serverItems = tab.getDisplayItems();
             } catch (Throwable t) {
-                Constants.LOG.error("Failed to safely generate items for tab {}", id, t);
+                Constants.LOG.error("Failed to safely build contents for tab {}", id, t);
+            }
+
+            if (serverItems == null || serverItems.isEmpty()) {
+                List<ItemStack> fallbackItems = new ArrayList<>();
+                try {
+                    ((CreativeModeTabAccessor) tab).getDisplayItemsGenerator().accept(dumpParams, (stack, visibility) -> {
+                        if (visibility != CreativeModeTab.TabVisibility.SEARCH_TAB_ONLY) {
+                            fallbackItems.add(stack);
+                        }
+                    });
+                } catch (Throwable t) {
+                    Constants.LOG.error("Failed to safely generate fallback items for tab {}", id, t);
+                }
+                serverItems = fallbackItems;
             }
 
             for (ItemStack stack : serverItems) {

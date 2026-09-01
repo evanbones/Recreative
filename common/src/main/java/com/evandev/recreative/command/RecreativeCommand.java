@@ -2,7 +2,7 @@ package com.evandev.recreative.command;
 
 import com.evandev.recreative.Constants;
 import com.evandev.recreative.api.ICustomIconTab;
-import com.evandev.recreative.client.gui.CreativeTabEditorScreen;
+import com.evandev.recreative.client.ClientCommandHelper;
 import com.evandev.recreative.data.Action;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
@@ -14,7 +14,6 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.HolderLookup;
@@ -89,21 +88,23 @@ public class RecreativeCommand {
                 .then(Commands.literal("editor")
                         .executes(context -> {
                             if (Services.PLATFORM.isPhysicalClient()) {
-                                Minecraft.getInstance().tell(() -> {
-                                    Minecraft.getInstance().setScreen(new CreativeTabEditorScreen(null));
-                                });
+                                ClientCommandHelper.openEditorScreen();
+                                return 1;
+                            } else {
+                                context.getSource().sendFailure(Component.translatable("command.recreative.editor.client_only"));
+                                return 0;
                             }
-                            return 1;
                         })
                 )
                 .then(Commands.literal("edit")
                         .executes(context -> {
                             if (Services.PLATFORM.isPhysicalClient()) {
-                                Minecraft.getInstance().tell(() -> {
-                                    Minecraft.getInstance().setScreen(new CreativeTabEditorScreen(null));
-                                });
+                                ClientCommandHelper.openEditorScreen();
+                                return 1;
+                            } else {
+                                context.getSource().sendFailure(Component.translatable("command.recreative.editor.client_only"));
+                                return 0;
                             }
-                            return 1;
                         })
                 )
                 .then(Commands.literal("dump")

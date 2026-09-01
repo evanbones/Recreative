@@ -8,8 +8,6 @@ import com.evandev.recreative.data.ItemEntry;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponentPatch;
@@ -23,7 +21,6 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -97,30 +94,6 @@ public abstract class CreativeModeTabMixin {
         }
     }
 
-    @WrapOperation(method = "buildContents", at = @At(value = "FIELD", target = "Lnet/minecraft/world/item/CreativeModeTab;displayItemsGenerator:Lnet/minecraft/world/item/CreativeModeTab$DisplayItemsGenerator;", opcode = Opcodes.GETFIELD))
-    private CreativeModeTab.DisplayItemsGenerator recreative$wrapDisplayItemsGenerator(CreativeModeTab instance, Operation<CreativeModeTab.DisplayItemsGenerator> original) {
-        CreativeModeTab.DisplayItemsGenerator originalGenerator = original.call(instance);
-        if (!ModConfig.get().enabled) return originalGenerator;
-
-        String id = recreative$getTabId();
-        CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
-        if (modifier == null || modifier.addItems.isEmpty()) return originalGenerator;
-
-        return (parameters, output) -> {
-            originalGenerator.accept(parameters, output);
-            for (ItemEntry entry : modifier.addItems) {
-                if (entry.after != null || entry.before != null) continue;
-
-                for (ItemStack stack : recreative$resolveStacksToAdd(entry, parameters)) {
-                    try {
-                        output.accept(stack, CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS);
-                    } catch (IllegalStateException | IllegalArgumentException ignored) {
-                    }
-                }
-            }
-        };
-    }
-
     @Unique
     private List<ItemStack> recreative$resolveStacksToAdd(ItemEntry entry, CreativeModeTab.ItemDisplayParameters parameters) {
         List<ItemStack> stacksToAdd = new ArrayList<>();
@@ -160,9 +133,13 @@ public abstract class CreativeModeTabMixin {
 
     @Inject(method = "buildContents", at = @At("TAIL"))
     private void postBuildContents(CreativeModeTab.ItemDisplayParameters parameters, CallbackInfo ci) {
+        String id = recreative$getTabId();
+        if (!id.isEmpty()) {
+            CreativeTabManager.PRISTINE_TAB_ITEMS.put(id, new ArrayList<>(this.displayItems));
+        }
+
         if (!ModConfig.get().enabled) return;
 
-        String id = recreative$getTabId();
         CreativeTabManager.TabModifier modifier = CreativeTabManager.TAB_MODIFIERS.get(id);
         if (modifier == null) return;
 
@@ -227,7 +204,6 @@ public abstract class CreativeModeTabMixin {
         if (!modifier.addItems.isEmpty()) {
             for (ItemEntry entry : modifier.addItems) {
                 if (entry == null || entry.item == null) continue;
-                if (entry.after == null && entry.before == null) continue;
 
                 for (ItemStack resolved : recreative$resolveStacksToAdd(entry, parameters)) {
                     int currentIndex = -1;
@@ -246,7 +222,7 @@ public abstract class CreativeModeTabMixin {
                                 targetIndex = i + 1;
                             }
                         }
-                    } else {
+                    } else if (entry.before != null) {
                         for (int i = 0; i < tempDisplayItems.size(); i++) {
                             if (i == currentIndex) continue;
                             if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.before)) {

@@ -77,6 +77,7 @@
   "gui.recreative.or_texture_path": "Or enter custom texture path (.png):",
 
   "command.recreative.reload.success": "Recreative configs and tabs reloaded!",
+  "command.recreative.editor.client_only": "The visual editor can only be opened on the client (singleplayer).",
   "command.recreative.dump.success": "Successfully dumped %s to",
   "command.recreative.dump.hover": "Click to open the exports folder",
   "command.recreative.dump.failure": "Failed to dump %s! Check the log file for errors."

@@ -61,6 +61,8 @@ General config options can be accessed in-game (when **[Cloth Config](https://mo
 
 Icon made by Nekomaster!
 
+Various in-game icons from https://zeromatrix.itch.io/rpgiab-icons, used under the CC BY 4.0 license.
+
 ---
 
 [![discord-plural](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/compact/social/discord-plural_vector.svg)](https://discord.com/invite/JcGRdT6Pbx) [![github-plural](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/compact/social/github-plural_vector.svg)](https://github.com/evanbones/Recreative)

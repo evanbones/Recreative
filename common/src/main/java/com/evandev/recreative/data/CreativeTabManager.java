@@ -35,6 +35,7 @@ import java.util.stream.Stream;
 
 public class CreativeTabManager {
     public static final Map<String, CreativeModeTab> RUNTIME_TABS = new LinkedHashMap<>();
+    public static final Map<String, List<ItemStack>> PRISTINE_TAB_ITEMS = new LinkedHashMap<>();
     public static final Set<String> REMOVED_TABS = new HashSet<>();
     public static final List<String> TAB_ORDER = new ArrayList<>();
     public static final Map<String, TabModifier> TAB_MODIFIERS = new HashMap<>();

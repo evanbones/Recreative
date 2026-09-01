@@ -219,7 +219,12 @@ public class EditorStateManager {
 
     private void populateTabDisplayItems(EditableTab editableTab, CreativeModeTab tab, HolderLookup.Provider holders) {
         editableTab.defaultItems.clear();
-        editableTab.defaultItems.addAll(generateDefaultItems(tab, holders));
+        List<ItemStack> pristine = CreativeTabManager.PRISTINE_TAB_ITEMS.get(editableTab.id);
+        if (pristine != null && !pristine.isEmpty()) {
+            editableTab.defaultItems.addAll(pristine);
+        } else {
+            editableTab.defaultItems.addAll(generateDefaultItems(tab, holders));
+        }
 
         editableTab.originalItemIds.clear();
         for (ItemStack s : editableTab.defaultItems) {
@@ -231,11 +236,24 @@ public class EditorStateManager {
             Collection<ItemStack> items = tab.getDisplayItems();
             if (!items.isEmpty()) {
                 editableTab.displayItems.addAll(items);
-                return;
+            } else {
+                editableTab.displayItems.addAll(editableTab.defaultItems);
             }
         } catch (Throwable ignored) {
+            editableTab.displayItems.addAll(editableTab.defaultItems);
         }
-        editableTab.displayItems.addAll(editableTab.defaultItems);
+
+        for (ItemStack s : editableTab.displayItems) {
+            String id = BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
+            if (editableTab.addedItems.stream().noneMatch(e -> Objects.equals(e.item, id))) {
+                editableTab.originalItemIds.add(id);
+            }
+        }
+        for (ItemEntry r : editableTab.removedItems) {
+            if (r != null && r.item != null && !r.item.startsWith("#")) {
+                editableTab.originalItemIds.add(r.item);
+            }
+        }
     }
 
     private void populateCustomTabItems(EditableTab editableTab, HolderLookup.Provider holders) {
@@ -339,15 +357,20 @@ public class EditorStateManager {
         tab.removedItems.clear();
 
         if (tab.defaultItems.isEmpty()) {
-            CreativeModeTab vanillaTab = BuiltInRegistries.CREATIVE_MODE_TAB.get(ResourceLocation.parse(id));
-            if (vanillaTab != null) {
-                CreativeModeTab.ItemDisplayParameters cachedParams = CreativeModeTabsAccessor.getCachedParameters();
-                HolderLookup.Provider holders = cachedParams != null ? CreativeTabManager.freshHolders(cachedParams.holders()) : null;
-                tab.defaultItems.addAll(generateDefaultItems(vanillaTab, holders));
-                tab.originalItemIds.clear();
-                for (ItemStack s : tab.defaultItems) {
-                    tab.originalItemIds.add(BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
+            List<ItemStack> pristine = CreativeTabManager.PRISTINE_TAB_ITEMS.get(id);
+            if (pristine != null && !pristine.isEmpty()) {
+                tab.defaultItems.addAll(pristine);
+            } else {
+                CreativeModeTab vanillaTab = BuiltInRegistries.CREATIVE_MODE_TAB.get(ResourceLocation.parse(id));
+                if (vanillaTab != null) {
+                    CreativeModeTab.ItemDisplayParameters cachedParams = CreativeModeTabsAccessor.getCachedParameters();
+                    HolderLookup.Provider holders = cachedParams != null ? CreativeTabManager.freshHolders(cachedParams.holders()) : null;
+                    tab.defaultItems.addAll(generateDefaultItems(vanillaTab, holders));
                 }
+            }
+            tab.originalItemIds.clear();
+            for (ItemStack s : tab.defaultItems) {
+                tab.originalItemIds.add(BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
             }
         }
         tab.displayItems.clear();

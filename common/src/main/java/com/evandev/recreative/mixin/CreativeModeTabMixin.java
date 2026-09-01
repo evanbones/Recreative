@@ -131,6 +131,55 @@ public abstract class CreativeModeTabMixin {
         return result;
     }
 
+    @Unique
+    private void recreative$applyPlacement(List<ItemStack> items, List<ItemStack> resolvedStacks, ItemEntry entry) {
+        int cursor = -1;
+
+        for (ItemStack resolved : resolvedStacks) {
+            int currentIndex = -1;
+            for (int i = 0; i < items.size(); i++) {
+                if (ItemStack.isSameItemSameComponents(items.get(i), resolved)) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+
+            int targetIndex;
+            if (cursor >= 0) {
+                targetIndex = Math.min(cursor, items.size());
+            } else {
+                targetIndex = items.size();
+                String anchor = entry.after != null ? entry.after : entry.before;
+                if (anchor != null) {
+                    for (int i = 0; i < items.size(); i++) {
+                        if (i == currentIndex) continue;
+                        if (BuiltInRegistries.ITEM.getKey(items.get(i).getItem()).toString().equals(anchor)) {
+                            targetIndex = entry.after != null ? i + 1 : i;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (currentIndex < 0) {
+                if (targetIndex > items.size()) targetIndex = items.size();
+                items.add(targetIndex, resolved);
+                cursor = targetIndex + 1;
+                continue;
+            }
+
+            if (targetIndex == currentIndex) {
+                cursor = currentIndex + 1;
+                continue;
+            }
+
+            ItemStack stack = items.remove(currentIndex);
+            if (targetIndex > currentIndex) targetIndex--;
+            items.add(targetIndex, stack);
+            cursor = targetIndex + 1;
+        }
+    }
+
     @Inject(method = "buildContents", at = @At("TAIL"))
     private void postBuildContents(CreativeModeTab.ItemDisplayParameters parameters, CallbackInfo ci) {
         String id = recreative$getTabId();
@@ -205,46 +254,9 @@ public abstract class CreativeModeTabMixin {
             for (ItemEntry entry : modifier.addItems) {
                 if (entry == null || entry.item == null) continue;
 
-                for (ItemStack resolved : recreative$resolveStacksToAdd(entry, parameters)) {
-                    int currentIndex = -1;
-                    for (int i = 0; i < tempDisplayItems.size(); i++) {
-                        if (ItemStack.isSameItemSameComponents(tempDisplayItems.get(i), resolved)) {
-                            currentIndex = i;
-                            break;
-                        }
-                    }
-
-                    int targetIndex = tempDisplayItems.size();
-                    if (entry.after != null) {
-                        for (int i = 0; i < tempDisplayItems.size(); i++) {
-                            if (i == currentIndex) continue;
-                            if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.after)) {
-                                targetIndex = i + 1;
-                                break;
-                            }
-                        }
-                    } else if (entry.before != null) {
-                        for (int i = 0; i < tempDisplayItems.size(); i++) {
-                            if (i == currentIndex) continue;
-                            if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.before)) {
-                                targetIndex = i;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (currentIndex < 0) {
-                        if (targetIndex > tempDisplayItems.size()) targetIndex = tempDisplayItems.size();
-                        tempDisplayItems.add(targetIndex, resolved);
-                        if (!tempSearchItems.contains(resolved)) tempSearchItems.add(resolved);
-                        continue;
-                    }
-
-                    if (targetIndex == currentIndex) continue;
-                    ItemStack stack = tempDisplayItems.remove(currentIndex);
-                    if (targetIndex > currentIndex) targetIndex--;
-                    tempDisplayItems.add(targetIndex, stack);
-                }
+                List<ItemStack> resolvedStacks = recreative$resolveStacksToAdd(entry, parameters);
+                recreative$applyPlacement(tempDisplayItems, resolvedStacks, entry);
+                recreative$applyPlacement(tempSearchItems, resolvedStacks, entry);
             }
         }
 

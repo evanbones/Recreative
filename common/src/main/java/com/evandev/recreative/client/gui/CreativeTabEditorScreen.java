@@ -1,6 +1,7 @@
 package com.evandev.recreative.client.gui;
 
 import com.evandev.recreative.Constants;
+import com.evandev.recreative.client.editor.EditorClipboard;
 import com.evandev.recreative.client.editor.EditorStateManager;
 import com.evandev.recreative.client.gui.modal.CreateTabModal;
 import com.evandev.recreative.client.gui.modal.IconPickerModal;
@@ -22,6 +23,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +61,7 @@ public class CreativeTabEditorScreen extends Screen {
     private ItemStack draggedStack = ItemStack.EMPTY;
     private String dragSource = null;
     private int dragSourceIndex = -1;
+    private List<Integer> dragSourceIndices = List.of();
     private boolean isUpdatingTab = false;
 
     public CreativeTabEditorScreen(@Nullable Screen parent) {
@@ -122,6 +125,8 @@ public class CreativeTabEditorScreen extends Screen {
             this.draggedStack = stack;
             this.dragSource = "grid";
             this.dragSourceIndex = idx;
+            List<Integer> selection = this.tabItemGridWidget.getSelectedIndices();
+            this.dragSourceIndices = selection.contains(idx) ? selection : List.of(idx);
         });
         int moveLeftX = this.tabItemGridWidget.getPanelX();
         int propPanelW = this.tabItemGridWidget.getPanelWidth();
@@ -164,48 +169,24 @@ public class CreativeTabEditorScreen extends Screen {
         int actionW = Math.min(80, Math.max(12, actionSpace / 2));
         int clearX = rowRight - actionW;
 
-        this.moveItemLeftButton = this.addRenderableWidget(Button.builder(Component.literal("◀"), b -> {
-            if (this.tabItemGridWidget != null) {
-                EditorStateManager.EditableTab tab = this.tabItemGridWidget.getTab();
-                int idx = this.tabItemGridWidget.getSelectedItemIndex();
-                if (tab != null && idx > 0) {
-                    this.stateManager.reorderItemInTab(tab.id, idx, idx - 1);
-                    this.tabItemGridWidget.setSelectedItemIndex(idx - 1);
-                }
-            }
-        }).bounds(moveLeftX, itemCtrlY, arrowW, 18).tooltip(Tooltip.create(Component.translatable("gui.recreative.move_left"))).build());
+        this.moveItemLeftButton = this.addRenderableWidget(Button.builder(Component.literal("◀"), b -> moveSelection(-1))
+                .bounds(moveLeftX, itemCtrlY, arrowW, 18).tooltip(Tooltip.create(Component.translatable("gui.recreative.move_left"))).build());
 
-        this.moveItemRightButton = this.addRenderableWidget(Button.builder(Component.literal("▶"), b -> {
-            if (this.tabItemGridWidget != null) {
-                EditorStateManager.EditableTab tab = this.tabItemGridWidget.getTab();
-                int idx = this.tabItemGridWidget.getSelectedItemIndex();
-                if (tab != null && idx >= 0 && idx < tab.displayItems.size() - 1) {
-                    this.stateManager.reorderItemInTab(tab.id, idx, idx + 1);
-                    this.tabItemGridWidget.setSelectedItemIndex(idx + 1);
-                }
-            }
-        }).bounds(moveRightX, itemCtrlY, arrowW, 18).tooltip(Tooltip.create(Component.translatable("gui.recreative.move_right"))).build());
+        this.moveItemRightButton = this.addRenderableWidget(Button.builder(Component.literal("▶"), b -> moveSelection(1))
+                .bounds(moveRightX, itemCtrlY, arrowW, 18).tooltip(Tooltip.create(Component.translatable("gui.recreative.move_right"))).build());
 
-        this.removeItemButton = this.addRenderableWidget(Button.builder(Component.translatable("gui.recreative.remove_item"), b -> {
-            if (this.tabItemGridWidget != null) {
-                EditorStateManager.EditableTab tab = this.tabItemGridWidget.getTab();
-                int idx = this.tabItemGridWidget.getSelectedItemIndex();
-                if (tab != null && idx >= 0 && idx < tab.displayItems.size()) {
-                    this.stateManager.removeItemFromTab(tab.id, idx);
-                    if (idx >= tab.displayItems.size()) {
-                        this.tabItemGridWidget.setSelectedItemIndex(tab.displayItems.size() - 1);
-                    }
-                }
-            }
-        }).bounds(removeX, itemCtrlY, actionW, 18).build());
+        this.removeItemButton = this.addRenderableWidget(Button.builder(Component.translatable("gui.recreative.remove_item"), b -> removeSelection())
+                .bounds(removeX, itemCtrlY, actionW, 18).build());
 
         this.addRenderableWidget(Button.builder(Component.translatable("gui.recreative.clear_all"), b -> {
             if (this.tabItemGridWidget != null) {
                 EditorStateManager.EditableTab tab = this.tabItemGridWidget.getTab();
                 if (tab != null) {
-                    while (!tab.displayItems.isEmpty()) {
-                        this.stateManager.removeItemFromTab(tab.id, 0);
+                    List<Integer> all = new ArrayList<>(tab.displayItems.size());
+                    for (int i = 0; i < tab.displayItems.size(); i++) {
+                        all.add(i);
                     }
+                    this.stateManager.removeItemsFromTab(tab.id, all);
                     this.tabItemGridWidget.setSelectedItemIndex(-1);
                 }
             }
@@ -283,6 +264,7 @@ public class CreativeTabEditorScreen extends Screen {
             this.draggedStack = stack;
             this.dragSource = "palette";
             this.dragSourceIndex = -1;
+            this.dragSourceIndices = List.of();
         });
         modFilterList.addAll(this.itemPaletteWidget.getModIds());
 
@@ -387,16 +369,147 @@ public class CreativeTabEditorScreen extends Screen {
         return entry;
     }
 
+    private List<Integer> currentSelection() {
+        if (this.tabItemGridWidget == null) return List.of();
+        EditorStateManager.EditableTab tab = this.tabItemGridWidget.getTab();
+        if (tab == null) return List.of();
+        List<Integer> selection = new ArrayList<>();
+        for (int index : this.tabItemGridWidget.getSelectedIndices()) {
+            if (index >= 0 && index < tab.displayItems.size()) {
+                selection.add(index);
+            }
+        }
+        return selection;
+    }
+
+    private void moveSelection(int delta) {
+        EditorStateManager.EditableTab tab = this.tabItemGridWidget != null ? this.tabItemGridWidget.getTab() : null;
+        List<Integer> selection = currentSelection();
+        if (tab == null || selection.isEmpty()) return;
+
+        int first = selection.getFirst();
+        int last = selection.getLast();
+        int target;
+        if (delta < 0) {
+            if (first <= 0) return;
+            target = first - 1;
+        } else {
+            if (last >= tab.displayItems.size() - 1) return;
+            target = last + 2;
+        }
+
+        int start = this.stateManager.reorderItemsInTab(tab.id, selection, target);
+        if (start >= 0) {
+            selectRun(start, selection.size());
+        }
+    }
+
+    private void removeSelection() {
+        EditorStateManager.EditableTab tab = this.tabItemGridWidget != null ? this.tabItemGridWidget.getTab() : null;
+        List<Integer> selection = currentSelection();
+        if (tab == null || selection.isEmpty()) return;
+
+        int firstIndex = selection.getFirst();
+        this.stateManager.removeItemsFromTab(tab.id, selection);
+        this.tabItemGridWidget.setSelectedItemIndex(Math.min(firstIndex, tab.displayItems.size() - 1));
+        this.tabListWidget.refreshList();
+    }
+
+    private void copySelection(boolean cut) {
+        EditorStateManager.EditableTab tab = this.tabItemGridWidget != null ? this.tabItemGridWidget.getTab() : null;
+        List<Integer> selection = currentSelection();
+        if (tab == null || selection.isEmpty()) return;
+
+        List<ItemEntry> entries = new ArrayList<>(selection.size());
+        for (int index : selection) {
+            entries.add(createItemEntry(tab.displayItems.get(index)));
+        }
+        EditorClipboard.set(entries);
+
+        if (cut) {
+            removeSelection();
+            setStatus(Component.translatable("gui.recreative.items_cut", entries.size()).getString(), 0xFFAA00);
+        } else {
+            setStatus(Component.translatable("gui.recreative.items_copied", entries.size()).getString(), 0x55FF55);
+        }
+        updateButtonStates();
+    }
+
+    private void pasteClipboard() {
+        EditorStateManager.EditableTab tab = this.tabItemGridWidget != null ? this.tabItemGridWidget.getTab() : null;
+        if (tab == null) return;
+        if (EditorClipboard.isEmpty()) {
+            setStatus(Component.translatable("gui.recreative.clipboard_empty").getString(), 0xFFAA00);
+            return;
+        }
+
+        List<Integer> selection = currentSelection();
+        int targetIdx = selection.isEmpty() ? tab.displayItems.size() : selection.getLast() + 1;
+
+        int[] result = this.stateManager.addItemsToTab(tab.id, EditorClipboard.get(), targetIdx);
+        if (result == null) return;
+
+        selectRun(result[0], result[1]);
+        this.tabListWidget.refreshList();
+        setStatus(Component.translatable("gui.recreative.items_pasted", result[1]).getString(), 0x55FF55);
+    }
+
+    private void selectRun(int start, int count) {
+        List<Integer> indices = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            indices.add(start + i);
+        }
+        this.tabItemGridWidget.setSelection(indices);
+    }
+
+    private boolean isTextInputFocused() {
+        return this.getFocused() instanceof ModEditBox box && box.isFocused();
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (!isTextInputFocused() && this.tabItemGridWidget != null && this.tabItemGridWidget.getTab() != null) {
+            if (Screen.hasControlDown() && !Screen.hasAltDown()) {
+                switch (keyCode) {
+                    case GLFW.GLFW_KEY_C -> {
+                        copySelection(false);
+                        return true;
+                    }
+                    case GLFW.GLFW_KEY_X -> {
+                        copySelection(true);
+                        return true;
+                    }
+                    case GLFW.GLFW_KEY_V -> {
+                        pasteClipboard();
+                        return true;
+                    }
+                    case GLFW.GLFW_KEY_A -> {
+                        this.tabItemGridWidget.selectAll();
+                        updateButtonStates();
+                        return true;
+                    }
+                    default -> {
+                    }
+                }
+            }
+            if (keyCode == GLFW.GLFW_KEY_DELETE && !currentSelection().isEmpty()) {
+                removeSelection();
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
     private void updateButtonStates() {
         if (this.tabItemGridWidget == null) return;
         EditorStateManager.EditableTab tab = this.tabItemGridWidget.getTab();
-        int idx = this.tabItemGridWidget.getSelectedItemIndex();
+        List<Integer> selection = currentSelection();
         boolean hasTab = tab != null;
-        boolean hasItem = hasTab && idx >= 0 && idx < tab.displayItems.size();
+        boolean hasItem = !selection.isEmpty();
 
-        if (this.moveItemLeftButton != null) this.moveItemLeftButton.active = hasItem && idx > 0;
+        if (this.moveItemLeftButton != null) this.moveItemLeftButton.active = hasItem && selection.getFirst() > 0;
         if (this.moveItemRightButton != null)
-            this.moveItemRightButton.active = hasItem && idx < tab.displayItems.size() - 1;
+            this.moveItemRightButton.active = hasItem && selection.getLast() < tab.displayItems.size() - 1;
         if (this.removeItemButton != null) this.removeItemButton.active = hasItem;
         if (this.resetTabButton != null) this.resetTabButton.active = hasTab && (tab.isModified() || tab.isCustomTab);
     }
@@ -437,16 +550,21 @@ public class CreativeTabEditorScreen extends Screen {
                         setStatus(Component.translatable("gui.recreative.item_added_notification", draggedStack.getHoverName().getString()).getString(), 0x55FF55);
                     } else if ("grid".equals(dragSource)) {
                         if (dragSourceIndex >= 0 && dragSourceIndex < tab.displayItems.size()) {
-                            int finalIdx = targetIdx > dragSourceIndex ? targetIdx - 1 : targetIdx;
-                            this.stateManager.reorderItemInTab(tab.id, dragSourceIndex, finalIdx);
-                            this.tabItemGridWidget.setSelectedItemIndex(finalIdx);
+                            int start = this.stateManager.reorderItemsInTab(tab.id, dragSourceIndices, targetIdx);
+                            if (start >= 0) {
+                                selectRun(start, dragSourceIndices.size());
+                            }
                         }
                     }
                 }
             }
+            if (this.tabItemGridWidget != null) {
+                this.tabItemGridWidget.endDragInteraction();
+            }
             this.draggedStack = ItemStack.EMPTY;
             this.dragSource = null;
             this.dragSourceIndex = -1;
+            this.dragSourceIndices = List.of();
             return true;
         }
 
@@ -629,6 +747,9 @@ public class CreativeTabEditorScreen extends Screen {
             guiGraphics.pose().translate(0.0f, 0.0f, 400.0f);
             guiGraphics.renderFakeItem(draggedStack, mouseX - 8, mouseY - 8);
             guiGraphics.renderItemDecorations(this.font, draggedStack, mouseX - 8, mouseY - 8);
+            if (this.dragSourceIndices.size() > 1) {
+                guiGraphics.drawString(this.font, "+" + (this.dragSourceIndices.size() - 1), mouseX + 6, mouseY + 2, 0xFFFFFF, true);
+            }
             guiGraphics.pose().popPose();
         }
     }

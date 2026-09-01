@@ -122,6 +122,12 @@ public class EditorStateManager {
         }
     }
 
+    private static List<Integer> descending(Collection<Integer> indices) {
+        List<Integer> sorted = new ArrayList<>(new TreeSet<>(indices));
+        Collections.reverse(sorted);
+        return sorted;
+    }
+
     public void loadState() {
         tabsMap.clear();
         tabOrder.clear();
@@ -433,7 +439,6 @@ public class EditorStateManager {
         EditableTab tab = tabsMap.get(tabId);
         if (tab == null || entry == null || entry.item == null) return;
         tab.removedItems.removeIf(r -> Objects.equals(r.item, entry.item));
-        tab.addedItems.add(entry);
 
         ItemStack stack = resolveItemStack(entry);
         if (!stack.isEmpty()) {
@@ -443,65 +448,191 @@ public class EditorStateManager {
                 tab.displayItems.add(stack);
             }
         }
+        tab.addedItems.add(entry);
+        updateItemPositions(tab);
         markDirty();
+    }
+
+    public int[] addItemsToTab(String tabId, List<ItemEntry> entries, int targetIndex) {
+        EditableTab tab = tabsMap.get(tabId);
+        if (tab == null || entries == null || entries.isEmpty()) return null;
+
+        int insertAt = (targetIndex < 0 || targetIndex > tab.displayItems.size()) ? tab.displayItems.size() : targetIndex;
+        int inserted = 0;
+
+        for (ItemEntry entry : entries) {
+            if (entry == null || entry.item == null) continue;
+            ItemEntry copy = entry.copy();
+            copy.after = null;
+            copy.before = null;
+
+            ItemStack stack = resolveItemStack(copy);
+            if (stack.isEmpty()) continue;
+
+            tab.removedItems.removeIf(r -> Objects.equals(r.item, copy.item));
+            tab.displayItems.add(insertAt + inserted, stack);
+            tab.addedItems.add(copy);
+            inserted++;
+        }
+
+        if (inserted == 0) return null;
+
+        updateItemPositions(tab);
+        markDirty();
+        return new int[]{insertAt, inserted};
     }
 
     public void removeItemFromTab(String tabId, int itemIndex) {
+        removeItemsFromTab(tabId, List.of(itemIndex));
+    }
+
+    public void removeItemsFromTab(String tabId, Collection<Integer> itemIndices) {
         EditableTab tab = tabsMap.get(tabId);
-        if (tab == null || itemIndex < 0 || itemIndex >= tab.displayItems.size()) return;
+        if (tab == null || itemIndices == null || itemIndices.isEmpty()) return;
 
-        ItemStack removedStack = tab.displayItems.remove(itemIndex);
-        if (removedStack.isEmpty()) return;
+        boolean changed = false;
+        for (int itemIndex : descending(itemIndices)) {
+            if (itemIndex < 0 || itemIndex >= tab.displayItems.size()) continue;
 
-        String itemId = BuiltInRegistries.ITEM.getKey(removedStack.getItem()).toString();
+            ItemStack removedStack = tab.displayItems.remove(itemIndex);
+            changed = true;
+            if (removedStack.isEmpty()) continue;
 
-        tab.addedItems.removeIf(e -> Objects.equals(e.item, itemId));
+            String itemId = BuiltInRegistries.ITEM.getKey(removedStack.getItem()).toString();
 
-        if (!tab.isCustomTab && tab.originalItemIds.contains(itemId)) {
-            if (tab.removedItems.stream().noneMatch(e -> Objects.equals(e.item, itemId))) {
-                tab.removedItems.add(new ItemEntry(itemId));
+            tab.addedItems.removeIf(e -> Objects.equals(e.item, itemId));
+
+            if (!tab.isCustomTab && tab.originalItemIds.contains(itemId)) {
+                if (tab.removedItems.stream().noneMatch(e -> Objects.equals(e.item, itemId))) {
+                    tab.removedItems.add(new ItemEntry(itemId));
+                }
             }
         }
 
+        if (!changed) return;
+
+        updateItemPositions(tab);
         markDirty();
     }
 
-    public void reorderItemInTab(String tabId, int fromIndex, int toIndex) {
+    public int reorderItemsInTab(String tabId, Collection<Integer> fromIndices, int toIndex) {
         EditableTab tab = tabsMap.get(tabId);
-        if (tab == null || fromIndex < 0 || fromIndex >= tab.displayItems.size() || toIndex < 0 || toIndex >= tab.displayItems.size())
-            return;
-        if (fromIndex == toIndex) return;
+        if (tab == null || fromIndices == null || fromIndices.isEmpty()) return -1;
 
-        ItemStack stack = tab.displayItems.remove(fromIndex);
-        tab.displayItems.add(toIndex, stack);
+        List<Integer> sorted = new ArrayList<>(new TreeSet<>(fromIndices));
+        for (int index : sorted) {
+            if (index < 0 || index >= tab.displayItems.size()) return -1;
+        }
 
-        String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-        ItemEntry entry = null;
-        for (ItemEntry e : tab.addedItems) {
-            if (Objects.equals(e.item, itemId)) {
-                entry = e;
-                break;
+        List<ItemStack> moving = new ArrayList<>(sorted.size());
+        for (int index : sorted) {
+            moving.add(tab.displayItems.get(index));
+        }
+
+        int insertAt = Math.max(0, Math.min(tab.displayItems.size(), toIndex));
+        for (int i = sorted.size() - 1; i >= 0; i--) {
+            int index = sorted.get(i);
+            tab.displayItems.remove(index);
+            if (index < insertAt) insertAt--;
+        }
+
+        insertAt = Math.max(0, Math.min(tab.displayItems.size(), insertAt));
+        tab.displayItems.addAll(insertAt, moving);
+
+        for (ItemStack stack : moving) {
+            String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+            if (tab.addedItems.stream().noneMatch(e -> Objects.equals(e.item, itemId))) {
+                tab.addedItems.add(new ItemEntry(itemId));
             }
         }
-        if (entry == null) {
-            entry = new ItemEntry(itemId);
-            tab.addedItems.add(entry);
-        }
 
-        if (toIndex > 0) {
-            ItemStack beforeStack = tab.displayItems.get(toIndex - 1);
-            entry.after = BuiltInRegistries.ITEM.getKey(beforeStack.getItem()).toString();
-            entry.before = null;
-        } else if (toIndex + 1 < tab.displayItems.size()) {
-            ItemStack afterStack = tab.displayItems.get(toIndex + 1);
-            entry.before = BuiltInRegistries.ITEM.getKey(afterStack.getItem()).toString();
-            entry.after = null;
-        }
-
+        updateItemPositions(tab);
         markDirty();
+        return insertAt;
+    }
+
+    public void updateItemPositions(EditableTab tab) {
+        if (tab == null) return;
+
+        if (tab.isCustomTab) {
+            List<ItemEntry> newAdded = new ArrayList<>();
+            List<ItemEntry> pool = new ArrayList<>(tab.addedItems);
+
+            for (ItemStack stack : tab.displayItems) {
+                String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                ItemEntry matched = null;
+                for (int i = 0; i < pool.size(); i++) {
+                    ItemEntry candidate = pool.get(i);
+                    if (Objects.equals(candidate.item, itemId)) {
+                        matched = pool.remove(i);
+                        break;
+                    }
+                }
+                if (matched == null) {
+                    matched = new ItemEntry(itemId);
+                }
+                matched.after = null;
+                matched.before = null;
+                newAdded.add(matched);
+            }
+            tab.addedItems.clear();
+            tab.addedItems.addAll(newAdded);
+            return;
+        }
+
+        List<ItemEntry> newAdded = new ArrayList<>();
+        List<ItemEntry> pool = new ArrayList<>(tab.addedItems);
+
+        for (int i = 0; i < tab.displayItems.size(); i++) {
+            ItemStack stack = tab.displayItems.get(i);
+            String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+
+            ItemEntry matched = null;
+            for (int p = 0; p < pool.size(); p++) {
+                ItemEntry candidate = pool.get(p);
+                if (Objects.equals(candidate.item, itemId)) {
+                    matched = pool.remove(p);
+                    break;
+                }
+            }
+
+            if (matched != null) {
+                if (i > 0) {
+                    ItemStack prevStack = tab.displayItems.get(i - 1);
+                    matched.after = BuiltInRegistries.ITEM.getKey(prevStack.getItem()).toString();
+                    matched.before = null;
+                } else {
+                    matched.after = null;
+                    String nextVanillaId = null;
+                    for (int j = 1; j < tab.displayItems.size(); j++) {
+                        ItemStack nextStack = tab.displayItems.get(j);
+                        String nextId = BuiltInRegistries.ITEM.getKey(nextStack.getItem()).toString();
+                        if (tab.originalItemIds.contains(nextId)) {
+                            nextVanillaId = nextId;
+                            break;
+                        }
+                    }
+                    if (nextVanillaId != null) {
+                        matched.before = nextVanillaId;
+                    } else if (tab.displayItems.size() > 1) {
+                        matched.before = BuiltInRegistries.ITEM.getKey(tab.displayItems.get(1).getItem()).toString();
+                    } else {
+                        matched.before = null;
+                    }
+                }
+                newAdded.add(matched);
+            }
+        }
+
+        tab.addedItems.clear();
+        tab.addedItems.addAll(newAdded);
     }
 
     public void saveAndApply() throws Exception {
+        for (EditableTab tab : tabsMap.values()) {
+            updateItemPositions(tab);
+        }
+
         Path configDir = Services.PLATFORM.getConfigDirectory().resolve("recreative");
         File dir = configDir.toFile();
         if (!dir.exists()) {

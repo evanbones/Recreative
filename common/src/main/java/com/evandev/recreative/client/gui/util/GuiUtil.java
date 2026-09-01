@@ -22,6 +22,7 @@ public class GuiUtil {
     public static final int SELECTED_SLOT = 0x7700BBFF;
     public static final int ADDED_SLOT = 0x3300FF00;
     public static final int INSERTION_MARKER = 0xFF00FFFF;
+    public static final int PRIMARY_SELECTION_OUTLINE = 0xFF88DDFF;
 
     public static final int SUBTEXT = 0xB5B5B5;
     public static final int BADGE_CUSTOM = 0x88CC88;

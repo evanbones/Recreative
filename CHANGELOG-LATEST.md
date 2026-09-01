@@ -1,7 +1,9 @@
 ### Added
 
-- Added an in-game creative tab editor.
+- Added multi-select support in the tab editor: Ctrl+click to toggle items, Shift+click to select a range, Ctrl+A to
+  select all.
+- You can now copy, cut, and paste items within a tab and between tabs, using Ctrl+C / Ctrl+X / Ctrl+V.
 
 ### Fixed
 
-- `/recreative dump templates` now dumps all modded items, not just vanilla ones.
+- Fixed tab ordering for items added to tabs.

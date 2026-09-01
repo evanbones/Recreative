@@ -220,6 +220,7 @@ public abstract class CreativeModeTabMixin {
                             if (i == currentIndex) continue;
                             if (BuiltInRegistries.ITEM.getKey(tempDisplayItems.get(i).getItem()).toString().equals(entry.after)) {
                                 targetIndex = i + 1;
+                                break;
                             }
                         }
                     } else if (entry.before != null) {

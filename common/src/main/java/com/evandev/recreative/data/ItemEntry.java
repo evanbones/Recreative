@@ -9,4 +9,12 @@ public class ItemEntry {
     public ItemEntry(String item) {
         this.item = item;
     }
+
+    public ItemEntry copy() {
+        ItemEntry copy = new ItemEntry(this.item);
+        copy.after = this.after;
+        copy.before = this.before;
+        copy.components = this.components;
+        return copy;
+    }
 }

@@ -18,9 +18,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -29,8 +27,10 @@ public class TabItemGridWidget extends AbstractWidget {
 
     private final EditorStateManager stateManager;
     private final Consumer<Integer> onSelectItem;
+    private final Set<Integer> selectedIndices = new LinkedHashSet<>();
     private EditorStateManager.EditableTab currentTab;
     private int selectedItemIndex = -1;
+    private int selectionAnchor = -1;
     private double scrollAmount = 0;
     private boolean isScrolling = false;
     private BiConsumer<Integer, ItemStack> onStartDrag;
@@ -39,6 +39,7 @@ public class TabItemGridWidget extends AbstractWidget {
     private double pressedMouseY = -1;
     private int pressedIndex = -1;
     private boolean dragInitiated = false;
+    private int collapseSelectionOnRelease = -1;
 
     public TabItemGridWidget(int x, int y, int width, int height,
                              EditorStateManager stateManager, Consumer<Integer> onSelectItem) {
@@ -59,7 +60,9 @@ public class TabItemGridWidget extends AbstractWidget {
         boolean sameTab = this.currentTab != null && tab != null && this.currentTab.id.equals(tab.id);
         this.currentTab = tab;
         if (!sameTab) {
+            this.selectedIndices.clear();
             this.selectedItemIndex = -1;
+            this.selectionAnchor = -1;
             this.scrollAmount = 0;
         }
     }
@@ -69,10 +72,78 @@ public class TabItemGridWidget extends AbstractWidget {
     }
 
     public void setSelectedItemIndex(int index) {
+        this.selectedIndices.clear();
+        if (index >= 0) {
+            this.selectedIndices.add(index);
+        }
+        this.selectionAnchor = index;
         this.selectedItemIndex = index;
         if (onSelectItem != null) {
             onSelectItem.accept(index);
         }
+    }
+
+    public List<Integer> getSelectedIndices() {
+        List<Integer> sorted = new ArrayList<>(selectedIndices);
+        Collections.sort(sorted);
+        return sorted;
+    }
+
+    public int getSelectionSize() {
+        return selectedIndices.size();
+    }
+
+    public boolean isSelected(int index) {
+        return selectedIndices.contains(index);
+    }
+
+    public void setSelection(Collection<Integer> indices) {
+        this.selectedIndices.clear();
+        int primary = -1;
+        if (indices != null && currentTab != null) {
+            for (int index : indices) {
+                if (index >= 0 && index < currentTab.displayItems.size()) {
+                    this.selectedIndices.add(index);
+                    primary = index;
+                }
+            }
+        }
+        this.selectedItemIndex = primary;
+        this.selectionAnchor = primary;
+        if (onSelectItem != null) {
+            onSelectItem.accept(primary);
+        }
+    }
+
+    public void selectRange(int startIndex, int endIndex) {
+        if (currentTab == null) return;
+        int from = Math.min(startIndex, endIndex);
+        int to = Math.max(startIndex, endIndex);
+        List<Integer> range = new ArrayList<>();
+        for (int i = from; i <= to; i++) {
+            range.add(i);
+        }
+        setSelection(range);
+        this.selectionAnchor = startIndex;
+        this.selectedItemIndex = endIndex;
+    }
+
+    public void selectAll() {
+        if (currentTab == null || currentTab.displayItems.isEmpty()) return;
+        selectRange(0, currentTab.displayItems.size() - 1);
+    }
+
+    public void clearSelection() {
+        setSelectedItemIndex(-1);
+    }
+
+    public void shiftSelectionAfterRemoval(int removedIndex) {
+        List<Integer> shifted = new ArrayList<>(selectedIndices.size());
+        for (int index : getSelectedIndices()) {
+            if (index == removedIndex) continue;
+            shifted.add(index > removedIndex ? index - 1 : index);
+        }
+        setSelection(shifted);
     }
 
     public int getColumns() {
@@ -210,16 +281,46 @@ public class TabItemGridWidget extends AbstractWidget {
         int index = slotIndexAt(mouseX, mouseY);
         if (index >= 0) {
             if (button == 1) {
-                stateManager.removeItemFromTab(currentTab.id, index);
-                if (selectedItemIndex >= currentTab.displayItems.size()) {
-                    setSelectedItemIndex(currentTab.displayItems.size() - 1);
+                if (isSelected(index) && selectedIndices.size() > 1) {
+                    stateManager.removeItemsFromTab(currentTab.id, getSelectedIndices());
+                    clearSelection();
+                } else {
+                    stateManager.removeItemFromTab(currentTab.id, index);
+                    shiftSelectionAfterRemoval(index);
                 }
             } else if (button == 0) {
                 this.pressedMouseX = mouseX;
                 this.pressedMouseY = mouseY;
                 this.pressedIndex = index;
                 this.dragInitiated = false;
-                setSelectedItemIndex(index);
+                this.collapseSelectionOnRelease = -1;
+
+                if (Screen.hasControlDown()) {
+                    if (!selectedIndices.remove(index)) {
+                        selectedIndices.add(index);
+                        this.selectedItemIndex = index;
+                    } else if (selectedItemIndex == index) {
+                        this.selectedItemIndex = selectedIndices.isEmpty() ? -1 : Collections.max(selectedIndices);
+                    }
+                    this.selectionAnchor = index;
+                    if (onSelectItem != null) {
+                        onSelectItem.accept(this.selectedItemIndex);
+                    }
+                } else if (Screen.hasShiftDown() && selectionAnchor >= 0 && selectionAnchor < currentTab.displayItems.size()) {
+                    selectRange(selectionAnchor, index);
+                    if (onSelectItem != null) {
+                        onSelectItem.accept(index);
+                    }
+                } else if (isSelected(index) && selectedIndices.size() > 1) {
+                    this.collapseSelectionOnRelease = index;
+                    this.selectedItemIndex = index;
+                    this.selectionAnchor = index;
+                    if (onSelectItem != null) {
+                        onSelectItem.accept(index);
+                    }
+                } else {
+                    setSelectedItemIndex(index);
+                }
             }
             return true;
         }
@@ -249,6 +350,13 @@ public class TabItemGridWidget extends AbstractWidget {
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
+    public void endDragInteraction() {
+        this.isScrolling = false;
+        this.pressedIndex = -1;
+        this.dragInitiated = false;
+        this.collapseSelectionOnRelease = -1;
+    }
+
     private void updateScrollFromMouse(double mouseY) {
         this.scrollAmount = GuiUtil.scrollAmountFromMouse(mouseY, getGridY(), getGridHeight(), getMaxScroll());
     }
@@ -257,6 +365,10 @@ public class TabItemGridWidget extends AbstractWidget {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         this.isScrolling = false;
         this.pressedIndex = -1;
+        if (this.collapseSelectionOnRelease >= 0 && !this.dragInitiated) {
+            setSelectedItemIndex(this.collapseSelectionOnRelease);
+        }
+        this.collapseSelectionOnRelease = -1;
         this.dragInitiated = false;
         return super.mouseReleased(mouseX, mouseY, button);
     }
@@ -321,8 +433,11 @@ public class TabItemGridWidget extends AbstractWidget {
                     guiGraphics.fill(slotX + 1, slotY + 1, slotX + SLOT_SIZE - 1, slotY + SLOT_SIZE - 1, GuiUtil.ADDED_SLOT);
                 }
 
-                if (index == selectedItemIndex) {
+                if (selectedIndices.contains(index)) {
                     guiGraphics.fill(slotX, slotY, slotX + SLOT_SIZE, slotY + SLOT_SIZE, GuiUtil.SELECTED_SLOT);
+                    if (index == selectedItemIndex && selectedIndices.size() > 1) {
+                        guiGraphics.renderOutline(slotX, slotY, SLOT_SIZE, SLOT_SIZE, GuiUtil.PRIMARY_SELECTION_OUTLINE);
+                    }
                 }
 
                 if (!stack.isEmpty()) {
@@ -350,6 +465,8 @@ public class TabItemGridWidget extends AbstractWidget {
             }
             tooltip.add(Component.translatable("gui.recreative.remove_item_tip").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
             tooltip.add(Component.translatable("gui.recreative.drag_tip").withStyle(ChatFormatting.DARK_AQUA, ChatFormatting.ITALIC));
+            tooltip.add(Component.translatable("gui.recreative.multi_select_tip").withStyle(ChatFormatting.DARK_AQUA, ChatFormatting.ITALIC));
+            tooltip.add(Component.translatable("gui.recreative.clipboard_tip").withStyle(ChatFormatting.DARK_AQUA, ChatFormatting.ITALIC));
             guiGraphics.renderTooltip(Minecraft.getInstance().font, tooltip, hoveredStack.getTooltipImage(), mouseX, mouseY);
         }
     }

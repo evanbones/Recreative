@@ -10,11 +10,14 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
@@ -424,8 +427,7 @@ public class TabItemGridWidget extends AbstractWidget {
                 int slotY = gridY + r * SLOT_SIZE - yOffset;
 
                 ItemStack stack = currentTab.displayItems.get(index);
-                String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-                boolean isAdded = isItemAddedByRule(itemId);
+                boolean isAdded = isItemAddedByRule(stack);
 
                 GuiUtil.drawSlot(guiGraphics, slotX, slotY);
 
@@ -471,10 +473,19 @@ public class TabItemGridWidget extends AbstractWidget {
         }
     }
 
-    private boolean isItemAddedByRule(String itemId) {
-        if (currentTab == null) return false;
+    private boolean isItemAddedByRule(ItemStack stack) {
+        if (currentTab == null || stack == null || stack.isEmpty()) return false;
+        String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
         for (ItemEntry entry : currentTab.addedItems) {
+            if (entry == null || entry.item == null) continue;
             if (Objects.equals(entry.item, itemId)) return true;
+            if (entry.item.startsWith("#")) {
+                try {
+                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(entry.item.substring(1)));
+                    if (stack.is(tagKey)) return true;
+                } catch (Exception ignored) {
+                }
+            }
         }
         return false;
     }

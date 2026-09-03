@@ -186,6 +186,64 @@ public class EditorStateManager {
         return source != null ? source : fallback;
     }
 
+    public static List<String> resolveTagItemIds(String tagString) {
+        if (tagString == null || !tagString.startsWith("#")) return List.of();
+        try {
+            TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(tagString.substring(1)));
+            List<String> ids = new ArrayList<>();
+            for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
+                ids.add(BuiltInRegistries.ITEM.getKey(holder.value()).toString());
+            }
+            return ids;
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private static List<MatchedTagSpan> findTagSpans(List<ItemStack> displayItems, List<ItemEntry> pool) {
+        List<MatchedTagSpan> spans = new ArrayList<>();
+        boolean[] claimed = new boolean[displayItems.size()];
+
+        for (ItemEntry entry : pool) {
+            if (entry == null || entry.item == null || !entry.item.startsWith("#")) continue;
+
+            List<String> tagIds = resolveTagItemIds(entry.item);
+            if (tagIds.isEmpty()) continue;
+
+            int tagLen = tagIds.size();
+            for (int i = 0; i <= displayItems.size() - tagLen; i++) {
+                boolean overlap = false;
+                for (int k = 0; k < tagLen; k++) {
+                    if (claimed[i + k]) {
+                        overlap = true;
+                        break;
+                    }
+                }
+                if (overlap) continue;
+
+                boolean matches = true;
+                for (int k = 0; k < tagLen; k++) {
+                    String itemId = itemIdOf(displayItems.get(i + k));
+                    if (!Objects.equals(itemId, tagIds.get(k))) {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                if (matches) {
+                    spans.add(new MatchedTagSpan(i, tagLen, entry));
+                    for (int k = 0; k < tagLen; k++) {
+                        claimed[i + k] = true;
+                    }
+                    break;
+                }
+            }
+        }
+
+        spans.sort(Comparator.comparingInt(s -> s.startIndex));
+        return spans;
+    }
+
     public void loadState() {
         tabsMap.clear();
         tabOrder.clear();
@@ -422,6 +480,7 @@ public class EditorStateManager {
         tab.customDisplayName = null;
         tab.customIcon = null;
         tab.isRemoved = false;
+        tab.itemsModified = false;
         tab.addedItems.clear();
         tab.removedItems.clear();
 
@@ -501,6 +560,7 @@ public class EditorStateManager {
     public void addItemToTab(String tabId, ItemEntry entry, int targetIndex) {
         EditableTab tab = tabsMap.get(tabId);
         if (tab == null || entry == null || entry.item == null) return;
+        tab.itemsModified = true;
         tab.removedItems.removeIf(r -> sameEntry(r, entry));
 
         ItemStack stack = resolveItemStack(entry);
@@ -520,6 +580,7 @@ public class EditorStateManager {
         EditableTab tab = tabsMap.get(tabId);
         if (tab == null || entries == null || entries.isEmpty()) return null;
 
+        tab.itemsModified = true;
         int insertAt = (targetIndex < 0 || targetIndex > tab.displayItems.size()) ? tab.displayItems.size() : targetIndex;
         int inserted = 0;
 
@@ -553,6 +614,7 @@ public class EditorStateManager {
         EditableTab tab = tabsMap.get(tabId);
         if (tab == null || itemIndices == null || itemIndices.isEmpty()) return;
 
+        tab.itemsModified = true;
         HolderLookup.Provider holders = editorHolders();
         boolean changed = false;
         for (int itemIndex : descending(itemIndices)) {
@@ -583,6 +645,7 @@ public class EditorStateManager {
         EditableTab tab = tabsMap.get(tabId);
         if (tab == null || fromIndices == null || fromIndices.isEmpty()) return -1;
 
+        tab.itemsModified = true;
         List<Integer> sorted = new ArrayList<>(new TreeSet<>(fromIndices));
         for (int index : sorted) {
             if (index < 0 || index >= tab.displayItems.size()) return -1;
@@ -620,12 +683,32 @@ public class EditorStateManager {
         if (tab == null) return;
 
         HolderLookup.Provider holders = editorHolders();
+        List<ItemEntry> newAdded = new ArrayList<>();
+        List<ItemEntry> pool = new ArrayList<>(tab.addedItems);
+
+        List<MatchedTagSpan> tagSpans = findTagSpans(tab.displayItems, pool);
+        for (MatchedTagSpan span : tagSpans) {
+            pool.remove(span.entry);
+        }
+
+        Map<Integer, MatchedTagSpan> spanByStart = new HashMap<>();
+        for (MatchedTagSpan span : tagSpans) {
+            spanByStart.put(span.startIndex, span);
+        }
 
         if (tab.isCustomTab) {
-            List<ItemEntry> newAdded = new ArrayList<>();
-            List<ItemEntry> pool = new ArrayList<>(tab.addedItems);
+            for (int i = 0; i < tab.displayItems.size(); i++) {
+                MatchedTagSpan span = spanByStart.get(i);
+                if (span != null) {
+                    ItemEntry tagEntry = span.entry.copy();
+                    tagEntry.after = null;
+                    tagEntry.before = null;
+                    newAdded.add(tagEntry);
+                    i += span.length - 1;
+                    continue;
+                }
 
-            for (ItemStack stack : tab.displayItems) {
+                ItemStack stack = tab.displayItems.get(i);
                 ItemEntry matched = takeMatch(pool, stack, holders);
                 if (matched == null) {
                     matched = entryFor(stack, holders);
@@ -639,12 +722,40 @@ public class EditorStateManager {
             return;
         }
 
-        List<ItemEntry> newAdded = new ArrayList<>();
-        List<ItemEntry> pool = new ArrayList<>(tab.addedItems);
-
         for (int i = 0; i < tab.displayItems.size(); i++) {
-            ItemStack stack = tab.displayItems.get(i);
+            MatchedTagSpan span = spanByStart.get(i);
+            if (span != null) {
+                ItemEntry tagEntry = span.entry.copy();
+                int startIdx = span.startIndex;
+                int endIdx = startIdx + span.length;
 
+                if (startIdx > 0) {
+                    tagEntry.after = ComponentUtil.anchorFor(tab.displayItems.get(startIdx - 1), tab.displayItems, holders);
+                    tagEntry.before = null;
+                } else {
+                    tagEntry.after = null;
+                    ItemStack nextVanilla = null;
+                    for (int j = endIdx; j < tab.displayItems.size(); j++) {
+                        ItemStack nextStack = tab.displayItems.get(j);
+                        if (tab.originalItemIds.contains(stackKey(nextStack, holders))) {
+                            nextVanilla = nextStack;
+                            break;
+                        }
+                    }
+                    if (nextVanilla != null) {
+                        tagEntry.before = ComponentUtil.anchorFor(nextVanilla, tab.displayItems, holders);
+                    } else if (tab.displayItems.size() > endIdx) {
+                        tagEntry.before = ComponentUtil.anchorFor(tab.displayItems.get(endIdx), tab.displayItems, holders);
+                    } else {
+                        tagEntry.before = null;
+                    }
+                }
+                newAdded.add(tagEntry);
+                i += span.length - 1;
+                continue;
+            }
+
+            ItemStack stack = tab.displayItems.get(i);
             ItemEntry matched = takeMatch(pool, stack, holders);
             if (matched == null) continue;
 
@@ -678,7 +789,9 @@ public class EditorStateManager {
 
     public void saveAndApply() throws Exception {
         for (EditableTab tab : tabsMap.values()) {
-            updateItemPositions(tab);
+            if (tab.itemsModified) {
+                updateItemPositions(tab);
+            }
         }
 
         Path configDir = Services.PLATFORM.getConfigDirectory().resolve(Constants.MOD_ID);
@@ -753,6 +866,9 @@ public class EditorStateManager {
         this.isDirty = false;
     }
 
+    private record MatchedTagSpan(int startIndex, int length, ItemEntry entry) {
+    }
+
     public static class EditableTab {
         public final String id;
         public final Set<String> originalItemIds = new HashSet<>();
@@ -762,6 +878,7 @@ public class EditorStateManager {
         public final List<ItemStack> displayItems = new ArrayList<>();
         public boolean isCustomTab;
         public boolean isRemoved = false;
+        public boolean itemsModified = false;
         public Component defaultDisplayName = Component.empty();
         public String customDisplayName = null;
         public ItemStack defaultIcon = ItemStack.EMPTY;
@@ -787,7 +904,7 @@ public class EditorStateManager {
         }
 
         public boolean isModified() {
-            return customDisplayName != null || customIcon != null || !addedItems.isEmpty() || !removedItems.isEmpty() || isRemoved;
+            return customDisplayName != null || customIcon != null || !addedItems.isEmpty() || !removedItems.isEmpty() || isRemoved || itemsModified;
         }
     }
 }

@@ -3,10 +3,7 @@ package com.evandev.recreative.command;
 import com.evandev.recreative.Constants;
 import com.evandev.recreative.api.ICustomIconTab;
 import com.evandev.recreative.client.ClientCommandHelper;
-import com.evandev.recreative.data.Action;
-import com.evandev.recreative.data.CreativeTabManager;
-import com.evandev.recreative.data.ItemEntry;
-import com.evandev.recreative.data.TabRule;
+import com.evandev.recreative.data.*;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import com.evandev.recreative.platform.Services;
 import com.google.gson.*;
@@ -48,8 +45,8 @@ public class RecreativeCommand {
                 }
                 JsonObject obj = new JsonObject();
                 obj.addProperty("item", src.item);
-                if (src.after != null) obj.addProperty("after", src.after);
-                if (src.before != null) obj.addProperty("before", src.before);
+                if (src.after != null) obj.add("after", ItemRef.toJson(src.after));
+                if (src.before != null) obj.add("before", ItemRef.toJson(src.before));
                 if (src.components != null) {
                     try {
                         obj.add("components", JsonParser.parseString(src.components));

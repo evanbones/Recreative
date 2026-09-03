@@ -1,10 +1,7 @@
 package com.evandev.recreative.client.editor;
 
 import com.evandev.recreative.Constants;
-import com.evandev.recreative.data.Action;
-import com.evandev.recreative.data.CreativeTabManager;
-import com.evandev.recreative.data.ItemEntry;
-import com.evandev.recreative.data.TabRule;
+import com.evandev.recreative.data.*;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabsAccessor;
 import com.evandev.recreative.platform.Services;
@@ -26,8 +23,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-import java.io.File;
-import java.io.FileWriter;
+import java.io.Writer;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -42,8 +39,8 @@ public class EditorStateManager {
                 }
                 JsonObject obj = new JsonObject();
                 obj.addProperty("item", src.item);
-                if (src.after != null) obj.addProperty("after", src.after);
-                if (src.before != null) obj.addProperty("before", src.before);
+                if (src.after != null) obj.add("after", ItemRef.toJson(src.after));
+                if (src.before != null) obj.add("before", ItemRef.toJson(src.before));
                 if (src.components != null) {
                     try {
                         obj.add("components", JsonParser.parseString(src.components));
@@ -54,7 +51,7 @@ public class EditorStateManager {
                 return obj;
             })
             .create();
-
+    private static final String SEP = String.valueOf((char) 1);
     private final Map<String, EditableTab> tabsMap = new LinkedHashMap<>();
     private final List<String> tabOrder = new ArrayList<>();
     private boolean isDirty = false;
@@ -122,10 +119,71 @@ public class EditorStateManager {
         }
     }
 
+    public static HolderLookup.Provider editorHolders() {
+        CreativeModeTab.ItemDisplayParameters cached = CreativeModeTabsAccessor.getCachedParameters();
+        if (cached != null) return CreativeTabManager.freshHolders(cached.holders());
+        return Minecraft.getInstance().level != null ? Minecraft.getInstance().level.registryAccess() : null;
+    }
+
+    private static String itemIdOf(ItemStack stack) {
+        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+    }
+
+    private static String stackKey(ItemStack stack, HolderLookup.Provider holders) {
+        if (stack == null || stack.isEmpty()) return "";
+        String id = itemIdOf(stack);
+        String components = ComponentUtil.encode(stack, holders);
+        return components == null ? id : id + SEP + components;
+    }
+
+    private static String entryKey(ItemEntry entry) {
+        if (entry == null || entry.item == null) return "";
+        return entry.components == null ? entry.item : entry.item + SEP + entry.components;
+    }
+
+    private static ItemEntry takeMatch(List<ItemEntry> pool, ItemStack stack, HolderLookup.Provider holders) {
+        String id = itemIdOf(stack);
+
+        int loose = -1;
+        int idOnly = -1;
+        for (int i = 0; i < pool.size(); i++) {
+            ItemEntry candidate = pool.get(i);
+            if (!Objects.equals(candidate.item, id)) continue;
+
+            if (candidate.components != null) {
+                if (ComponentUtil.matches(stack, candidate.item, candidate.components, holders)) {
+                    return pool.remove(i);
+                }
+                if (idOnly < 0) idOnly = i;
+            } else if (loose < 0) {
+                loose = i;
+            }
+        }
+
+        if (loose >= 0) return pool.remove(loose);
+        if (idOnly >= 0) return pool.remove(idOnly);
+        return null;
+    }
+
+    private static ItemEntry entryFor(ItemStack stack, HolderLookup.Provider holders) {
+        return new ItemEntry(itemIdOf(stack), ComponentUtil.encode(stack, holders));
+    }
+
+    private static boolean sameEntry(ItemEntry a, ItemEntry b) {
+        return a != null && b != null
+                && Objects.equals(a.item, b.item)
+                && Objects.equals(a.components, b.components);
+    }
+
     private static List<Integer> descending(Collection<Integer> indices) {
         List<Integer> sorted = new ArrayList<>(new TreeSet<>(indices));
         Collections.reverse(sorted);
         return sorted;
+    }
+
+    private static Path sourceFor(String tabId, Path fallback) {
+        Path source = CreativeTabManager.TAB_RULE_SOURCES.get(tabId);
+        return source != null ? source : fallback;
     }
 
     public void loadState() {
@@ -232,9 +290,12 @@ public class EditorStateManager {
             editableTab.defaultItems.addAll(generateDefaultItems(tab, holders));
         }
 
+        HolderLookup.Provider keyHolders = holders != null ? holders : editorHolders();
+
         editableTab.originalItemIds.clear();
         for (ItemStack s : editableTab.defaultItems) {
-            editableTab.originalItemIds.add(BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
+            editableTab.originalItemIds.add(itemIdOf(s));
+            editableTab.originalItemIds.add(stackKey(s, keyHolders));
         }
 
         editableTab.displayItems.clear();
@@ -250,14 +311,16 @@ public class EditorStateManager {
         }
 
         for (ItemStack s : editableTab.displayItems) {
-            String id = BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
-            if (editableTab.addedItems.stream().noneMatch(e -> Objects.equals(e.item, id))) {
-                editableTab.originalItemIds.add(id);
+            String key = stackKey(s, keyHolders);
+            if (editableTab.addedItems.stream().noneMatch(e -> Objects.equals(entryKey(e), key))) {
+                editableTab.originalItemIds.add(itemIdOf(s));
+                editableTab.originalItemIds.add(key);
             }
         }
         for (ItemEntry r : editableTab.removedItems) {
             if (r != null && r.item != null && !r.item.startsWith("#")) {
                 editableTab.originalItemIds.add(r.item);
+                editableTab.originalItemIds.add(entryKey(r));
             }
         }
     }
@@ -318,7 +381,7 @@ public class EditorStateManager {
 
     public void createCustomTab(String id, String name, String icon) {
         if (id == null || id.isEmpty()) return;
-        if (!id.contains(":")) id = "recreative:" + id;
+        if (!id.contains(":")) id = Constants.MOD_ID + ":" + id;
 
         if (tabsMap.containsKey(id)) {
             EditableTab existing = tabsMap.get(id);
@@ -438,7 +501,7 @@ public class EditorStateManager {
     public void addItemToTab(String tabId, ItemEntry entry, int targetIndex) {
         EditableTab tab = tabsMap.get(tabId);
         if (tab == null || entry == null || entry.item == null) return;
-        tab.removedItems.removeIf(r -> Objects.equals(r.item, entry.item));
+        tab.removedItems.removeIf(r -> sameEntry(r, entry));
 
         ItemStack stack = resolveItemStack(entry);
         if (!stack.isEmpty()) {
@@ -469,7 +532,7 @@ public class EditorStateManager {
             ItemStack stack = resolveItemStack(copy);
             if (stack.isEmpty()) continue;
 
-            tab.removedItems.removeIf(r -> Objects.equals(r.item, copy.item));
+            tab.removedItems.removeIf(r -> sameEntry(r, copy));
             tab.displayItems.add(insertAt + inserted, stack);
             tab.addedItems.add(copy);
             inserted++;
@@ -490,6 +553,7 @@ public class EditorStateManager {
         EditableTab tab = tabsMap.get(tabId);
         if (tab == null || itemIndices == null || itemIndices.isEmpty()) return;
 
+        HolderLookup.Provider holders = editorHolders();
         boolean changed = false;
         for (int itemIndex : descending(itemIndices)) {
             if (itemIndex < 0 || itemIndex >= tab.displayItems.size()) continue;
@@ -498,13 +562,13 @@ public class EditorStateManager {
             changed = true;
             if (removedStack.isEmpty()) continue;
 
-            String itemId = BuiltInRegistries.ITEM.getKey(removedStack.getItem()).toString();
+            ItemEntry removedEntry = entryFor(removedStack, holders);
 
-            tab.addedItems.removeIf(e -> Objects.equals(e.item, itemId));
+            takeMatch(tab.addedItems, removedStack, holders);
 
-            if (!tab.isCustomTab && tab.originalItemIds.contains(itemId)) {
-                if (tab.removedItems.stream().noneMatch(e -> Objects.equals(e.item, itemId))) {
-                    tab.removedItems.add(new ItemEntry(itemId));
+            if (!tab.isCustomTab && tab.originalItemIds.contains(stackKey(removedStack, holders))) {
+                if (tab.removedItems.stream().noneMatch(e -> sameEntry(e, removedEntry))) {
+                    tab.removedItems.add(removedEntry);
                 }
             }
         }
@@ -539,10 +603,11 @@ public class EditorStateManager {
         insertAt = Math.max(0, Math.min(tab.displayItems.size(), insertAt));
         tab.displayItems.addAll(insertAt, moving);
 
+        HolderLookup.Provider holders = editorHolders();
         for (ItemStack stack : moving) {
-            String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-            if (tab.addedItems.stream().noneMatch(e -> Objects.equals(e.item, itemId))) {
-                tab.addedItems.add(new ItemEntry(itemId));
+            ItemEntry entry = entryFor(stack, holders);
+            if (tab.addedItems.stream().noneMatch(e -> sameEntry(e, entry))) {
+                tab.addedItems.add(entry);
             }
         }
 
@@ -554,22 +619,16 @@ public class EditorStateManager {
     public void updateItemPositions(EditableTab tab) {
         if (tab == null) return;
 
+        HolderLookup.Provider holders = editorHolders();
+
         if (tab.isCustomTab) {
             List<ItemEntry> newAdded = new ArrayList<>();
             List<ItemEntry> pool = new ArrayList<>(tab.addedItems);
 
             for (ItemStack stack : tab.displayItems) {
-                String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-                ItemEntry matched = null;
-                for (int i = 0; i < pool.size(); i++) {
-                    ItemEntry candidate = pool.get(i);
-                    if (Objects.equals(candidate.item, itemId)) {
-                        matched = pool.remove(i);
-                        break;
-                    }
-                }
+                ItemEntry matched = takeMatch(pool, stack, holders);
                 if (matched == null) {
-                    matched = new ItemEntry(itemId);
+                    matched = entryFor(stack, holders);
                 }
                 matched.after = null;
                 matched.before = null;
@@ -585,43 +644,32 @@ public class EditorStateManager {
 
         for (int i = 0; i < tab.displayItems.size(); i++) {
             ItemStack stack = tab.displayItems.get(i);
-            String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
 
-            ItemEntry matched = null;
-            for (int p = 0; p < pool.size(); p++) {
-                ItemEntry candidate = pool.get(p);
-                if (Objects.equals(candidate.item, itemId)) {
-                    matched = pool.remove(p);
-                    break;
+            ItemEntry matched = takeMatch(pool, stack, holders);
+            if (matched == null) continue;
+
+            if (i > 0) {
+                matched.after = ComponentUtil.anchorFor(tab.displayItems.get(i - 1), tab.displayItems, holders);
+                matched.before = null;
+            } else {
+                matched.after = null;
+                ItemStack nextVanilla = null;
+                for (int j = 1; j < tab.displayItems.size(); j++) {
+                    ItemStack nextStack = tab.displayItems.get(j);
+                    if (tab.originalItemIds.contains(stackKey(nextStack, holders))) {
+                        nextVanilla = nextStack;
+                        break;
+                    }
                 }
-            }
-
-            if (matched != null) {
-                if (i > 0) {
-                    ItemStack prevStack = tab.displayItems.get(i - 1);
-                    matched.after = BuiltInRegistries.ITEM.getKey(prevStack.getItem()).toString();
-                    matched.before = null;
+                if (nextVanilla != null) {
+                    matched.before = ComponentUtil.anchorFor(nextVanilla, tab.displayItems, holders);
+                } else if (tab.displayItems.size() > 1) {
+                    matched.before = ComponentUtil.anchorFor(tab.displayItems.get(1), tab.displayItems, holders);
                 } else {
-                    matched.after = null;
-                    String nextVanillaId = null;
-                    for (int j = 1; j < tab.displayItems.size(); j++) {
-                        ItemStack nextStack = tab.displayItems.get(j);
-                        String nextId = BuiltInRegistries.ITEM.getKey(nextStack.getItem()).toString();
-                        if (tab.originalItemIds.contains(nextId)) {
-                            nextVanillaId = nextId;
-                            break;
-                        }
-                    }
-                    if (nextVanillaId != null) {
-                        matched.before = nextVanillaId;
-                    } else if (tab.displayItems.size() > 1) {
-                        matched.before = BuiltInRegistries.ITEM.getKey(tab.displayItems.get(1).getItem()).toString();
-                    } else {
-                        matched.before = null;
-                    }
+                    matched.before = null;
                 }
-                newAdded.add(matched);
             }
+            newAdded.add(matched);
         }
 
         tab.addedItems.clear();
@@ -633,32 +681,31 @@ public class EditorStateManager {
             updateItemPositions(tab);
         }
 
-        Path configDir = Services.PLATFORM.getConfigDirectory().resolve("recreative");
-        File dir = configDir.toFile();
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
+        Path configDir = Services.PLATFORM.getConfigDirectory().resolve(Constants.MOD_ID);
+        Files.createDirectories(configDir);
+        Path defaultFile = configDir.resolve("tabs.json");
 
-        List<TabRule> rules = new ArrayList<>();
+        Map<Path, List<TabRule>> byFile = new LinkedHashMap<>();
 
-        List<String> removedTabsList = new ArrayList<>();
+        Map<Path, List<String>> removedByFile = new LinkedHashMap<>();
         for (EditableTab tab : tabsMap.values()) {
             if (tab.isRemoved) {
-                removedTabsList.add(tab.id);
+                removedByFile.computeIfAbsent(sourceFor(tab.id, defaultFile), k -> new ArrayList<>()).add(tab.id);
             }
         }
-        if (!removedTabsList.isEmpty()) {
+        removedByFile.forEach((file, ids) -> {
             TabRule removeRule = new TabRule();
             removeRule.action = Action.REMOVE_TAB;
-            removeRule.tabs = removedTabsList;
-            rules.add(removeRule);
-        }
+            removeRule.tabs = ids;
+            byFile.computeIfAbsent(file, k -> new ArrayList<>()).add(removeRule);
+        });
 
         if (!tabOrder.isEmpty()) {
             TabRule orderRule = new TabRule();
             orderRule.action = Action.TAB_ORDER;
             orderRule.order = new ArrayList<>(tabOrder);
-            rules.add(orderRule);
+            Path orderFile = CreativeTabManager.GLOBAL_RULE_SOURCES.getOrDefault("tab_order", defaultFile);
+            byFile.computeIfAbsent(orderFile, k -> new ArrayList<>()).add(orderRule);
         }
 
         for (EditableTab tab : tabsMap.values()) {
@@ -669,7 +716,7 @@ public class EditorStateManager {
                 customRule.name = tab.customDisplayName != null ? tab.customDisplayName : tab.id;
                 customRule.icon = tab.customIcon != null ? tab.customIcon : "minecraft:stone";
                 customRule.addItems = new ArrayList<>(tab.addedItems);
-                rules.add(customRule);
+                byFile.computeIfAbsent(sourceFor(tab.id, defaultFile), k -> new ArrayList<>()).add(customRule);
             }
         }
 
@@ -682,13 +729,24 @@ public class EditorStateManager {
                 if (tab.customIcon != null) modRule.icon = tab.customIcon;
                 if (!tab.addedItems.isEmpty()) modRule.addItems = new ArrayList<>(tab.addedItems);
                 if (!tab.removedItems.isEmpty()) modRule.removeItems = new ArrayList<>(tab.removedItems);
-                rules.add(modRule);
+                byFile.computeIfAbsent(sourceFor(tab.id, defaultFile), k -> new ArrayList<>()).add(modRule);
             }
         }
 
-        File outFile = new File(dir, "tabs.json");
-        try (FileWriter writer = new FileWriter(outFile)) {
-            GSON.toJson(rules, writer);
+        Set<Path> touched = new LinkedHashSet<>(byFile.keySet());
+        touched.addAll(CreativeTabManager.TAB_RULE_SOURCES.values());
+        touched.addAll(CreativeTabManager.GLOBAL_RULE_SOURCES.values());
+        if (!byFile.isEmpty()) touched.add(defaultFile);
+
+        for (Path file : touched) {
+            List<TabRule> rules = byFile.getOrDefault(file, List.of());
+            if (rules.isEmpty() && !Files.exists(file)) continue;
+            try (Writer writer = Files.newBufferedWriter(file)) {
+                GSON.toJson(rules, writer);
+            } catch (Exception e) {
+                Constants.LOG.error("Failed to write Recreative rules to {}", file, e);
+                throw e;
+            }
         }
 
         CreativeTabManager.reloadTabs();

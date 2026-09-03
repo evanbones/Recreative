@@ -40,6 +40,8 @@ public class CreativeTabManager {
     public static final List<String> TAB_ORDER = new ArrayList<>();
     public static final Map<String, TabModifier> TAB_MODIFIERS = new HashMap<>();
     public static final Map<String, TabModifier> CUSTOM_TABS_DEFS = new HashMap<>();
+    public static final Map<String, Path> TAB_RULE_SOURCES = new HashMap<>();
+    public static final Map<String, Path> GLOBAL_RULE_SOURCES = new HashMap<>();
     private static final Gson GSON = new GsonBuilder()
             .setLenient()
             .registerTypeAdapter(ItemEntry.class, new ItemEntryDeserializer())
@@ -55,6 +57,8 @@ public class CreativeTabManager {
         TAB_MODIFIERS.clear();
         CUSTOM_TABS_DEFS.clear();
         RUNTIME_TABS.clear();
+        TAB_RULE_SOURCES.clear();
+        GLOBAL_RULE_SOURCES.clear();
 
         Path configDir = Services.PLATFORM.getConfigDirectory().resolve("recreative");
 
@@ -224,10 +228,10 @@ public class CreativeTabManager {
                 JsonElement json = JsonParser.parseReader(reader);
                 if (json.isJsonArray()) {
                     for (JsonElement e : json.getAsJsonArray()) {
-                        processRule(GSON.fromJson(e, TabRule.class));
+                        processRule(GSON.fromJson(e, TabRule.class), path);
                     }
                 } else if (json.isJsonObject()) {
-                    processRule(GSON.fromJson(json, TabRule.class));
+                    processRule(GSON.fromJson(json, TabRule.class), path);
                 }
             }
         } catch (Exception e) {
@@ -235,14 +239,21 @@ public class CreativeTabManager {
         }
     }
 
-    private static void processRule(TabRule rule) {
+    private static void processRule(TabRule rule, Path source) {
         if (rule.action == null) return;
 
         switch (rule.action) {
-            case REMOVE_TAB -> REMOVED_TABS.addAll(rule.tabs);
-            case TAB_ORDER -> TAB_ORDER.addAll(rule.order);
+            case REMOVE_TAB -> {
+                REMOVED_TABS.addAll(rule.tabs);
+                GLOBAL_RULE_SOURCES.putIfAbsent("remove_tab", source);
+            }
+            case TAB_ORDER -> {
+                TAB_ORDER.addAll(rule.order);
+                GLOBAL_RULE_SOURCES.putIfAbsent("tab_order", source);
+            }
             case MODIFY_TAB -> {
                 for (String tabId : rule.tabs) {
+                    TAB_RULE_SOURCES.putIfAbsent(tabId, source);
                     TabModifier modifyDef = TAB_MODIFIERS.computeIfAbsent(tabId, k -> new TabModifier());
                     if (rule.name != null) modifyDef.name = rule.name;
                     if (rule.icon != null) modifyDef.icon = rule.icon;
@@ -252,6 +263,7 @@ public class CreativeTabManager {
             }
             case CUSTOM_TAB -> {
                 for (String tabId : rule.tabs) {
+                    TAB_RULE_SOURCES.putIfAbsent(tabId, source);
                     TabModifier customDef = new TabModifier();
                     customDef.name = rule.name != null ? rule.name : "Custom Tab";
                     customDef.icon = rule.icon != null ? rule.icon : "minecraft:stone";
@@ -320,8 +332,8 @@ public class CreativeTabManager {
                 JsonObject obj = json.getAsJsonObject();
                 if (!obj.has("item")) return null;
                 ItemEntry entry = new ItemEntry(obj.get("item").getAsString());
-                if (obj.has("after")) entry.after = obj.get("after").getAsString();
-                if (obj.has("before")) entry.before = obj.get("before").getAsString();
+                if (obj.has("after")) entry.after = ItemRef.fromJson(obj.get("after"));
+                if (obj.has("before")) entry.before = ItemRef.fromJson(obj.get("before"));
                 if (obj.has("components")) {
                     JsonElement comp = obj.get("components");
                     entry.components = comp.isJsonObject() ? comp.toString() : comp.getAsString();

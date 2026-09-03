@@ -3,13 +3,16 @@ package com.evandev.recreative.mixin;
 import com.evandev.recreative.Constants;
 import com.evandev.recreative.api.ICustomIconTab;
 import com.evandev.recreative.config.ModConfig;
+import com.evandev.recreative.data.ComponentUtil;
 import com.evandev.recreative.data.CreativeTabManager;
 import com.evandev.recreative.data.ItemEntry;
+import com.evandev.recreative.data.ItemRef;
 import com.evandev.recreative.mixin.accessor.CreativeModeTabAccessor;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -132,7 +135,8 @@ public abstract class CreativeModeTabMixin {
     }
 
     @Unique
-    private void recreative$applyPlacement(List<ItemStack> items, List<ItemStack> resolvedStacks, ItemEntry entry) {
+    private void recreative$applyPlacement(List<ItemStack> items, List<ItemStack> resolvedStacks, ItemEntry entry,
+                                           HolderLookup.Provider holders) {
         int cursor = -1;
 
         for (ItemStack resolved : resolvedStacks) {
@@ -149,14 +153,21 @@ public abstract class CreativeModeTabMixin {
                 targetIndex = Math.min(cursor, items.size());
             } else {
                 targetIndex = items.size();
-                String anchor = entry.after != null ? entry.after : entry.before;
-                if (anchor != null) {
+                ItemRef anchor = entry.after != null ? entry.after : entry.before;
+                if (anchor != null && anchor.item != null) {
+                    int fallback = -1;
                     for (int i = 0; i < items.size(); i++) {
                         if (i == currentIndex) continue;
-                        if (BuiltInRegistries.ITEM.getKey(items.get(i).getItem()).toString().equals(anchor)) {
-                            targetIndex = entry.after != null ? i + 1 : i;
+                        if (!BuiltInRegistries.ITEM.getKey(items.get(i).getItem()).toString().equals(anchor.item))
+                            continue;
+                        if (fallback < 0) fallback = i;
+                        if (anchor.components == null || ComponentUtil.matches(items.get(i), anchor, holders)) {
+                            fallback = i;
                             break;
                         }
+                    }
+                    if (fallback >= 0) {
+                        targetIndex = entry.after != null ? fallback + 1 : fallback;
                     }
                 }
             }
@@ -255,8 +266,8 @@ public abstract class CreativeModeTabMixin {
                 if (entry == null || entry.item == null) continue;
 
                 List<ItemStack> resolvedStacks = recreative$resolveStacksToAdd(entry, parameters);
-                recreative$applyPlacement(tempDisplayItems, resolvedStacks, entry);
-                recreative$applyPlacement(tempSearchItems, resolvedStacks, entry);
+                recreative$applyPlacement(tempDisplayItems, resolvedStacks, entry, parameters.holders());
+                recreative$applyPlacement(tempSearchItems, resolvedStacks, entry, parameters.holders());
             }
         }
 

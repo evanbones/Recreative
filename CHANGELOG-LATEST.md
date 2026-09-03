@@ -1,3 +1,3 @@
 ### Fixed
 
-- Generated rules no longer overwrite tag-based and list rules.
+- Fixed crash with certain mods that modify creative tabs.

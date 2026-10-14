@@ -136,14 +136,26 @@ public abstract class CreativeModeTabMixin {
     }
 
     @Unique
+    private static Item recreative$resolveAnchorItem(ItemRef anchor) {
+        if (anchor == null || anchor.item == null) return null;
+        ResourceLocation id = ResourceLocation.tryParse(anchor.item);
+        if (id == null || !id.toString().equals(anchor.item)) return null;
+        return BuiltInRegistries.ITEM.getOptional(id).orElse(null);
+    }
+
+    @Unique
     private void recreative$applyPlacement(List<ItemStack> items, List<ItemStack> resolvedStacks, ItemEntry entry,
                                            HolderLookup.Provider holders) {
         int cursor = -1;
+        ItemRef anchor = entry.after != null ? entry.after : entry.before;
+        Item anchorItem = recreative$resolveAnchorItem(anchor);
 
         for (ItemStack resolved : resolvedStacks) {
+            Item resolvedItem = resolved.getItem();
             int currentIndex = -1;
             for (int i = 0; i < items.size(); i++) {
-                if (ItemStack.isSameItemSameComponents(items.get(i), resolved)) {
+                ItemStack candidate = items.get(i);
+                if (candidate.getItem() == resolvedItem && ItemStack.isSameItemSameComponents(candidate, resolved)) {
                     currentIndex = i;
                     break;
                 }
@@ -154,13 +166,11 @@ public abstract class CreativeModeTabMixin {
                 targetIndex = Math.min(cursor, items.size());
             } else {
                 targetIndex = items.size();
-                ItemRef anchor = entry.after != null ? entry.after : entry.before;
-                if (anchor != null && anchor.item != null) {
+                if (anchorItem != null) {
                     int fallback = -1;
                     for (int i = 0; i < items.size(); i++) {
                         if (i == currentIndex) continue;
-                        if (!BuiltInRegistries.ITEM.getKey(items.get(i).getItem()).toString().equals(anchor.item))
-                            continue;
+                        if (items.get(i).getItem() != anchorItem) continue;
                         if (fallback < 0) fallback = i;
                         if (anchor.components == null || ComponentUtil.matches(items.get(i), anchor, holders)) {
                             fallback = i;

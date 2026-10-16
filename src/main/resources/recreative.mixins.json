@@ -1,0 +1,25 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.evandev.recreative.mixin",
+  "plugin": "com.moulberry.mixinconstraints.ConstraintsMixinPlugin",
+  "compatibilityLevel": "JAVA_${java_version}",
+  "mixins": [
+    "CreativeModeTabIconMixin",
+    "CreativeModeTabMixin",
+    "CreativeModeTabsMixin",
+    "accessor.CreativeModeTabAccessor",
+    "accessor.CreativeModeTabsAccessor",
+    "accessor.MappedRegistryAccessor"
+  ],
+  "client": [
+    "CreativeModeInventoryScreenMixin",
+    "accessor.AbstractContainerScreenAccessor",
+    "accessor.ScreenAccessor",
+    "emi.EmiStackListMixin"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

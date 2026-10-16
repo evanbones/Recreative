@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.evandev.recreative.mixin",
+  "compatibilityLevel": "JAVA_${java_version}",
+  "mixins": [
+    "neoforge.NeoForgeCreativeTabRegistryMixin"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

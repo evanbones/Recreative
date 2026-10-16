@@ -1,0 +1,73 @@
+package com.evandev.recreative.config;
+
+import com.evandev.recreative.Constants;
+import com.evandev.recreative.platform.Platform;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+
+public class ModConfig {
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final File CONFIG_FILE = Platform.getConfigDirectory().resolve("recreative_settings.json").toFile();
+    private static ModConfig INSTANCE;
+
+    @SerializedName("enabled")
+    public boolean enabled = true;
+
+    @SerializedName("show_internal_tab_ids")
+    public boolean showInternalTabIds = false;
+
+    @SerializedName("show_editor_button")
+    public boolean showEditorButton = true;
+
+    @SerializedName("enable_button_tooltip")
+    public boolean enableButtonTooltip = true;
+
+    @SerializedName("editor_button_offset_x")
+    public int editorButtonOffsetX = 0;
+
+    @SerializedName("editor_button_offset_y")
+    public int editorButtonOffsetY = 0;
+
+    @SerializedName("custom_editor_button_texture")
+    public String customEditorButtonTexture = "";
+
+    @SerializedName("custom_editor_button_texture_hovered")
+    public String customEditorButtonTextureHovered = "";
+
+    @SerializedName("custom_editor_button_icon")
+    public String customEditorButtonIcon = "minecraft:compass";
+
+    public static ModConfig get() {
+        if (INSTANCE == null) load();
+        return INSTANCE;
+    }
+
+    public static void load() {
+        if (CONFIG_FILE.exists()) {
+            try (FileReader reader = new FileReader(CONFIG_FILE)) {
+                INSTANCE = GSON.fromJson(reader, ModConfig.class);
+            } catch (Exception e) {
+                Constants.LOG.error("Failed to load recreative_settings.json", e);
+                INSTANCE = new ModConfig();
+                save();
+            }
+        } else {
+            INSTANCE = new ModConfig();
+            save();
+        }
+    }
+
+    public static void save() {
+        try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
+            GSON.toJson(INSTANCE, writer);
+        } catch (IOException e) {
+            Constants.LOG.error("Failed to save recreative_settings.json", e);
+        }
+    }
+}

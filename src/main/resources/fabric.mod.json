@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${description}",
+  "authors": [
+    "${mod_author}"
+  ],
+  "contact": {
+    "homepage": "https://github.com/evanbones/Recreative",
+    "sources": "https://github.com/evanbones/Recreative"
+  },
+  "license": "${license}",
+  "icon": "${mod_id}.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.evandev.recreative.fabric.RecreativeFabric"
+    ],
+    "modmenu": [
+      "com.evandev.recreative.fabric.compat.ModMenuIntegration"
+    ],
+    "emi": [
+      "com.evandev.recreative.client.integration.RecreativeEmiPlugin"
+    ]
+  },
+  "mixins": [
+    "${mod_id}.mixins.json",
+    "${mod_id}.fabric.mixins.json"
+  ],
+  "accessWidener": "${mod_id}.accesswidener",
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft}",
+    "java": ">=${java_version}"
+  },
+  "suggests": {
+    "yet_another_config_lib_v3": ">=${yacl_version}"
+  }
+}

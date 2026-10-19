@@ -5,8 +5,8 @@ import com.evandev.recreative.client.gui.button.CreativeScreenEditorButton;
 import com.evandev.recreative.client.gui.util.GuiCompat;
 import com.evandev.recreative.config.ModConfig;
 import com.evandev.recreative.mixin.accessor.AbstractContainerScreenAccessor;
-import com.evandev.recreative.mixin.accessor.ScreenAccessor;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -19,7 +19,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(CreativeModeInventoryScreen.class)
-public abstract class CreativeModeInventoryScreenMixin {
+public abstract class CreativeModeInventoryScreenMixin extends Screen {
+
+    protected CreativeModeInventoryScreenMixin(Component title) {
+        super(title);
+    }
 
     @Shadow
     protected abstract int getTabX(CreativeModeTab tab);
@@ -29,8 +33,7 @@ public abstract class CreativeModeInventoryScreenMixin {
         if (!ModConfig.get().showEditorButton) return;
 
         AbstractContainerScreenAccessor accessor = (AbstractContainerScreenAccessor) this;
-        ScreenAccessor screenAccessor = (ScreenAccessor) this;
-        screenAccessor.recreative$invokeAddRenderableWidget(new CreativeScreenEditorButton(
+        this.addRenderableWidget(new CreativeScreenEditorButton(
                 () -> accessor.getLeftPos() + accessor.getImageWidth() + 4,
                 () -> accessor.getTopPos() + 6,
                 Component.literal("Edit")

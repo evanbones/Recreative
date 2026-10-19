@@ -15,7 +15,6 @@
   "client": [
     "CreativeModeInventoryScreenMixin",
     "accessor.AbstractContainerScreenAccessor",
-    "accessor.ScreenAccessor",
     "emi.EmiStackListMixin"
   ],
   "server": [],

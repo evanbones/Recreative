@@ -1,3 +1,3 @@
 ### Fixed
 
-- Fixed crash on Forge 1.20.
+- Translation keys used as tab names now display translated in the tab editor.

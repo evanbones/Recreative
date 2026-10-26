@@ -30,4 +30,24 @@ For example:
 
 ```
 
+### Names
+Any `name` field can be a translation key instead of plain text. Recreative will look it up in the active language, so your tab names can be localized through a resource pack:
+
+```json
+{
+  "action": "custom_tab",
+  "tabs": ["my_pack:magic"],
+  "name": "itemGroup.my_pack.magic"
+}
+```
+
+```json
+// assets/my_pack/lang/en_us.json
+{
+  "itemGroup.my_pack.magic": "Magical Items"
+}
+```
+
+If the key has no translation, the text is shown as written.
+
 To see all available actions and what they do, check out the [Rule Actions](/project/recreative/docs/recreative/actions) page.

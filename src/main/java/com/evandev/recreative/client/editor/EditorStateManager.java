@@ -271,7 +271,7 @@ public class EditorStateManager {
             CreativeModeTab tab = CreativeTabManager.RUNTIME_TABS.get(tabId);
 
             EditableTab editableTab = new EditableTab(tabId, true);
-            editableTab.defaultDisplayName = Component.literal(def.name != null ? def.name : "Custom Tab");
+            editableTab.defaultDisplayName = def.name != null ? Component.translatable(def.name) : Component.literal("Custom Tab");
             editableTab.customDisplayName = def.name;
             editableTab.customIcon = def.icon;
             editableTab.addedItems.addAll(def.addItems);
@@ -433,7 +433,7 @@ public class EditorStateManager {
             existing.isRemoved = false;
         } else {
             EditableTab tab = new EditableTab(id, true);
-            tab.defaultDisplayName = Component.literal(name != null ? name : id);
+            tab.defaultDisplayName = name != null ? Component.translatable(name) : Component.literal(id);
             tab.customDisplayName = name;
             tab.customIcon = icon != null && !icon.isEmpty() ? icon : "minecraft:stone";
             tab.defaultIcon = resolveIconStack(tab.customIcon);
@@ -875,7 +875,7 @@ public class EditorStateManager {
 
         public Component getEffectiveDisplayName() {
             if (customDisplayName != null && !customDisplayName.isEmpty()) {
-                return Component.literal(customDisplayName);
+                return Component.translatable(customDisplayName);
             }
             return defaultDisplayName != null ? defaultDisplayName : Component.literal(id);
         }
